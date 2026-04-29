@@ -223,4 +223,5 @@ segments:
 
 ## 文档
 
-更完整的需求说明见 [docs/requirements.md](docs/requirements.md)。
+- [需求文档](docs/requirements.md)
+- [开发计划](docs/development-plan.md)

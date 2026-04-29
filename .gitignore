@@ -1,0 +1,44 @@
+# Python bytecode and caches
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Build and packaging artifacts
+build/
+dist/
+*.egg-info/
+
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+config.yaml
+config.local.yaml
+
+# Runtime outputs
+outputs/
+logs/
+*.log
+
+# Downloaded media and generated audio/video
+*.wav
+*.mp3
+*.m4a
+*.mp4
+*.webm
+*.mov
+
+# OS and editor files
+.DS_Store
+.idea/
+.vscode/
