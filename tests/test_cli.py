@@ -99,8 +99,11 @@ def test_process_cleanup_source_option_overrides_config(tmp_path):
 def test_process_can_run_full_pipeline_with_generate(monkeypatch, tmp_path):
     calls = []
 
-    def fake_fetch(metadata_path):
-        calls.append(("fetch", metadata_path.name))
+    def fake_fetch_metadata(url):
+        calls.append(("fetch_metadata", url))
+        from video2post.models import VideoMetadata
+
+        return VideoMetadata(title="Real Video Title")
 
     def fake_prepare(metadata_path, config):
         calls.append(("audio", metadata_path.name))
@@ -114,7 +117,7 @@ def test_process_can_run_full_pipeline_with_generate(monkeypatch, tmp_path):
         calls.append(("generate", tuple(targets or [])))
         return [metadata_path.parent / "titles.md"]
 
-    monkeypatch.setattr("video2post.cli.fetch_video_metadata", fake_fetch)
+    monkeypatch.setattr("video2post.cli.fetch_initial_video_metadata", fake_fetch_metadata)
     monkeypatch.setattr("video2post.cli.prepare_audio", fake_prepare)
     monkeypatch.setattr("video2post.cli.transcribe_audio", fake_transcribe)
     monkeypatch.setattr("video2post.cli.generate_outputs", fake_generate)
@@ -134,11 +137,12 @@ def test_process_can_run_full_pipeline_with_generate(monkeypatch, tmp_path):
 
     assert result.exit_code == 0
     assert calls == [
-        ("fetch", "meta.json"),
+        ("fetch_metadata", "https://www.youtube.com/watch?v=abc"),
         ("audio", "meta.json"),
         ("transcribe", "meta.json"),
         ("generate", ("titles",)),
     ]
+    assert list(tmp_path.glob("*/meta.json"))[0].parent.name.endswith("real-video-title")
     assert "Transcript:" in result.output
     assert "Generated:" in result.output
 
@@ -147,8 +151,8 @@ def test_process_can_skip_transcribe_and_generate(monkeypatch, tmp_path):
     calls = []
 
     monkeypatch.setattr(
-        "video2post.cli.fetch_video_metadata",
-        lambda metadata_path: calls.append("fetch"),
+        "video2post.cli.fetch_initial_video_metadata",
+        lambda url: calls.append("fetch_metadata") or None,
     )
     monkeypatch.setattr(
         "video2post.cli.prepare_audio",
@@ -176,4 +180,4 @@ def test_process_can_skip_transcribe_and_generate(monkeypatch, tmp_path):
     )
 
     assert result.exit_code == 0
-    assert calls == ["fetch", "audio"]
+    assert calls == ["fetch_metadata", "audio"]

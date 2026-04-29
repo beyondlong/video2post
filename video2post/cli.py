@@ -1,4 +1,5 @@
 import json
+import subprocess
 from pathlib import Path
 from typing import Annotated
 
@@ -6,12 +7,14 @@ import typer
 
 from video2post.config import config_to_dict, load_config
 from video2post.downloader.ytdlp import detect_platform
+from video2post.downloader.ytdlp import YtDlpDownloader
+from video2post.models import VideoMetadata
 from video2post.pipeline import (
-    fetch_video_metadata,
     generate_outputs,
     prepare_audio,
     transcribe_audio,
 )
+from video2post.writers.metadata import write_metadata
 from video2post.writers.workspace import create_task_workspace
 
 
@@ -82,12 +85,15 @@ def process(
         loaded_config.app.cleanup_source = cleanup_source
     output_dir = output or loaded_config.app.output_dir
     platform = detect_platform(url)
+    video_metadata = fetch_initial_video_metadata(url) or VideoMetadata(title="untitled")
     metadata = create_task_workspace(
         output_dir=output_dir,
         source_url=url,
         platform=platform,
-        title="untitled",
+        title=video_metadata.title or "untitled",
     )
+    metadata.video = video_metadata
+    write_metadata(metadata)
     typer.echo(f"Task directory: {metadata.task_dir}")
     typer.echo(f"Platform: {platform}")
     typer.echo(
@@ -95,7 +101,6 @@ def process(
     )
 
     if download:
-        fetch_video_metadata(metadata.task_dir / "meta.json")
         audio_path = prepare_audio(metadata.task_dir / "meta.json", loaded_config)
         typer.echo(f"Audio: {audio_path}")
         if transcribe:
@@ -132,3 +137,10 @@ def _parse_targets(raw_targets: str | None) -> list[str] | None:
     if not raw_targets:
         return None
     return [target.strip() for target in raw_targets.split(",") if target.strip()]
+
+
+def fetch_initial_video_metadata(url: str) -> VideoMetadata:
+    try:
+        return YtDlpDownloader().fetch_metadata(url)
+    except subprocess.CalledProcessError:
+        return VideoMetadata(title="untitled")
