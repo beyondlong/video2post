@@ -27,6 +27,13 @@ class VideoMetadata(BaseModel):
     published_at: str | None = None
 
 
+class TranscriptSegment(BaseModel):
+    start: float
+    end: float
+    text: str
+    language: str | None = None
+
+
 class ErrorDetails(BaseModel):
     stage: str
     message: str

@@ -2,11 +2,13 @@ import subprocess
 from pathlib import Path
 
 from video2post.audio.ffmpeg import FfmpegAudioNormalizer
+from video2post.asr.faster_whisper import FasterWhisperTranscriber
 from video2post.config import AppConfig
 from video2post.downloader.ytdlp import YtDlpDownloader
 from video2post.models import TaskStatus
 from video2post.writers.metadata import read_metadata, update_status
 from video2post.writers.metadata import write_metadata
+from video2post.writers.transcript import write_transcript
 
 
 def fetch_video_metadata(
@@ -74,6 +76,49 @@ def prepare_audio(
             TaskStatus.FAILED,
             error_stage=failed_stage.value,
             error_message=(error.stderr or str(error)),
+            retryable=True,
+        )
+        raise
+
+
+def transcribe_audio(
+    metadata_path: Path | str,
+    config: AppConfig,
+    *,
+    transcriber: FasterWhisperTranscriber | None = None,
+) -> Path:
+    metadata = read_metadata(metadata_path)
+    transcript_path = metadata.task_dir / "transcript.en.md"
+    audio_path = metadata.task_dir / "audio.wav"
+
+    if config.app.skip_existing and transcript_path.exists():
+        update_status(metadata_path, TaskStatus.TRANSCRIBED)
+        return transcript_path
+
+    active_transcriber = transcriber or FasterWhisperTranscriber(
+        model_name=config.asr.faster_whisper_model
+    )
+
+    try:
+        segments = active_transcriber.transcribe(audio_path, language="en")
+        write_transcript(
+            transcript_path,
+            title=metadata.video.title or "untitled",
+            platform=metadata.platform,
+            source_url=metadata.source_url,
+            segments=segments,
+            heading="Transcript EN",
+        )
+        metadata.asr_model = active_transcriber.model_name
+        metadata.status = TaskStatus.TRANSCRIBED
+        write_metadata(metadata)
+        return transcript_path
+    except Exception as error:
+        update_status(
+            metadata_path,
+            TaskStatus.FAILED,
+            error_stage=TaskStatus.TRANSCRIBED.value,
+            error_message=str(error),
             retryable=True,
         )
         raise
