@@ -42,9 +42,18 @@ def process(
             help="Download and normalize audio after creating the task workspace.",
         ),
     ] = True,
+    cleanup_source: Annotated[
+        bool | None,
+        typer.Option(
+            "--cleanup-source/--keep-source",
+            help="Delete the compressed downloaded source after audio normalization.",
+        ),
+    ] = None,
 ) -> None:
     """Process a video URL through the local pipeline."""
     loaded_config = load_config(config)
+    if cleanup_source is not None:
+        loaded_config.app.cleanup_source = cleanup_source
     output_dir = output or loaded_config.app.output_dir
     platform = detect_platform(url)
     metadata = create_task_workspace(
@@ -55,6 +64,9 @@ def process(
     )
     typer.echo(f"Task directory: {metadata.task_dir}")
     typer.echo(f"Platform: {platform}")
+    typer.echo(
+        f"Source cleanup: {'enabled' if loaded_config.app.cleanup_source else 'disabled'}"
+    )
 
     if download:
         fetch_video_metadata(metadata.task_dir / "meta.json")

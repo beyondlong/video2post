@@ -9,6 +9,7 @@ def test_default_config_uses_outputs_directory():
     assert config.app.output_dir == Path("outputs")
     assert config.app.keep_audio is True
     assert config.app.skip_existing is True
+    assert config.app.cleanup_source is False
 
 
 def test_load_config_merges_yaml_values(tmp_path):

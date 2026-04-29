@@ -63,6 +63,8 @@ def prepare_audio(
             sample_rate=config.audio.sample_rate,
             channels=config.audio.channels,
         )
+        if config.app.cleanup_source and source_audio != normalized_audio:
+            source_audio.unlink(missing_ok=True)
         update_status(metadata_path, TaskStatus.AUDIO_NORMALIZED)
         return normalized_audio
     except subprocess.CalledProcessError as error:

@@ -9,6 +9,7 @@ class AppSettings(BaseModel):
     output_dir: Path = Path("outputs")
     keep_audio: bool = True
     skip_existing: bool = True
+    cleanup_source: bool = False
 
 
 class DownloadSettings(BaseModel):

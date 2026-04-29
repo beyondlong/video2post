@@ -2,6 +2,7 @@ app:
   output_dir: outputs
   keep_audio: true
   skip_existing: true
+  cleanup_source: false
 
 download:
   preferred_audio_format: wav

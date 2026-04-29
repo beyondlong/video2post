@@ -77,3 +77,20 @@ app:
     assert str(overridden_output) in result.output
     assert not configured_output.exists()
     assert list(overridden_output.glob("*/meta.json"))
+
+
+def test_process_cleanup_source_option_overrides_config(tmp_path):
+    result = runner.invoke(
+        app,
+        [
+            "process",
+            "https://www.youtube.com/watch?v=abc",
+            "--output",
+            str(tmp_path),
+            "--cleanup-source",
+            "--no-download",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "Source cleanup: enabled" in result.output

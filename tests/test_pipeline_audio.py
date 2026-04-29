@@ -53,6 +53,28 @@ def test_prepare_audio_downloads_normalizes_and_updates_metadata(tmp_path):
     assert loaded.status == TaskStatus.AUDIO_NORMALIZED
     assert downloader.downloads[0][0] == "https://youtu.be/abc"
     assert normalizer.calls[0][1] == tmp_path / "audio.wav"
+    assert (tmp_path / "downloaded.m4a").exists()
+
+
+def test_prepare_audio_can_cleanup_downloaded_source(tmp_path):
+    metadata = TaskMetadata(
+        source_url="https://youtu.be/abc",
+        platform="youtube",
+        task_dir=tmp_path,
+        video=VideoMetadata(title="Test"),
+    )
+    write_metadata(metadata)
+    config = AppConfig()
+    config.app.cleanup_source = True
+
+    prepare_audio(
+        tmp_path / "meta.json",
+        config,
+        downloader=FakeDownloader(),
+        normalizer=FakeNormalizer(),
+    )
+
+    assert not (tmp_path / "downloaded.m4a").exists()
 
 
 def test_prepare_audio_records_failure(tmp_path):
