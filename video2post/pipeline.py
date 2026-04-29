@@ -216,6 +216,13 @@ def _prepare_generation_transcript(
         summary_path = summary_dir / f"chunk-{index:03d}.summary.md"
         write_markdown(chunk_path, chunk)
 
+        existing_summary = (
+            summary_path.read_text(encoding="utf-8") if summary_path.exists() else ""
+        )
+        if existing_summary.strip():
+            summaries.append(existing_summary)
+            continue
+
         prompt = renderer.render(
             "chunk_summary",
             {

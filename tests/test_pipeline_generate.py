@@ -144,6 +144,54 @@ def test_generate_outputs_summarizes_large_transcript_in_chunks(tmp_path):
     ).read_text(encoding="utf-8")
 
 
+def test_generate_outputs_reuses_existing_chunk_summaries(tmp_path):
+    metadata = TaskMetadata(
+        source_url="https://youtu.be/test",
+        platform="youtube",
+        task_dir=tmp_path,
+        video=VideoMetadata(title="Long Video"),
+    )
+    write_metadata(metadata)
+    (tmp_path / "transcript.en.md").write_text(
+        "paragraph one has enough text\n\nparagraph two has enough text",
+        encoding="utf-8",
+    )
+    summary_dir = tmp_path / "summaries"
+    summary_dir.mkdir()
+    (summary_dir / "chunk-001.summary.md").write_text(
+        "Existing summary one",
+        encoding="utf-8",
+    )
+    (summary_dir / "chunk-002.summary.md").write_text(
+        "Existing summary two",
+        encoding="utf-8",
+    )
+    prompt_dir = tmp_path / "prompts"
+    prompt_dir.mkdir()
+    (prompt_dir / "chunk_summary.md").write_text(
+        "summarize chunk {{ chunk_index }}",
+        encoding="utf-8",
+    )
+    (prompt_dir / "notes.md").write_text(
+        "final notes\n{{ transcript }}",
+        encoding="utf-8",
+    )
+    provider = FakeProvider()
+
+    outputs = generate_outputs(
+        tmp_path / "meta.json",
+        AppConfig.model_validate({"generation": {"chunk_max_chars": 35}}),
+        provider=provider,
+        prompt_dir=prompt_dir,
+        targets=["notes"],
+    )
+
+    assert outputs == [tmp_path / "notes.md"]
+    assert len(provider.prompts) == 1
+    assert "Existing summary one" in provider.prompts[0]
+    assert "Existing summary two" in provider.prompts[0]
+
+
 def test_generate_outputs_records_failure_when_chunk_summary_fails(tmp_path):
     metadata = TaskMetadata(
         source_url="https://youtu.be/test",
