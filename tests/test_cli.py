@@ -94,3 +94,86 @@ def test_process_cleanup_source_option_overrides_config(tmp_path):
 
     assert result.exit_code == 0
     assert "Source cleanup: enabled" in result.output
+
+
+def test_process_can_run_full_pipeline_with_generate(monkeypatch, tmp_path):
+    calls = []
+
+    def fake_fetch(metadata_path):
+        calls.append(("fetch", metadata_path.name))
+
+    def fake_prepare(metadata_path, config):
+        calls.append(("audio", metadata_path.name))
+        return metadata_path.parent / "audio.wav"
+
+    def fake_transcribe(metadata_path, config):
+        calls.append(("transcribe", metadata_path.name))
+        return metadata_path.parent / "transcript.en.md"
+
+    def fake_generate(metadata_path, config, targets=None):
+        calls.append(("generate", tuple(targets or [])))
+        return [metadata_path.parent / "titles.md"]
+
+    monkeypatch.setattr("video2post.cli.fetch_video_metadata", fake_fetch)
+    monkeypatch.setattr("video2post.cli.prepare_audio", fake_prepare)
+    monkeypatch.setattr("video2post.cli.transcribe_audio", fake_transcribe)
+    monkeypatch.setattr("video2post.cli.generate_outputs", fake_generate)
+
+    result = runner.invoke(
+        app,
+        [
+            "process",
+            "https://www.youtube.com/watch?v=abc",
+            "--output",
+            str(tmp_path),
+            "--generate",
+            "--targets",
+            "titles",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert calls == [
+        ("fetch", "meta.json"),
+        ("audio", "meta.json"),
+        ("transcribe", "meta.json"),
+        ("generate", ("titles",)),
+    ]
+    assert "Transcript:" in result.output
+    assert "Generated:" in result.output
+
+
+def test_process_can_skip_transcribe_and_generate(monkeypatch, tmp_path):
+    calls = []
+
+    monkeypatch.setattr(
+        "video2post.cli.fetch_video_metadata",
+        lambda metadata_path: calls.append("fetch"),
+    )
+    monkeypatch.setattr(
+        "video2post.cli.prepare_audio",
+        lambda metadata_path, config: calls.append("audio") or metadata_path.parent / "audio.wav",
+    )
+    monkeypatch.setattr(
+        "video2post.cli.transcribe_audio",
+        lambda metadata_path, config: calls.append("transcribe"),
+    )
+    monkeypatch.setattr(
+        "video2post.cli.generate_outputs",
+        lambda metadata_path, config, targets=None: calls.append("generate"),
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            "process",
+            "https://www.youtube.com/watch?v=abc",
+            "--output",
+            str(tmp_path),
+            "--no-transcribe",
+            "--no-generate",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert calls == ["fetch", "audio"]

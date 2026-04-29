@@ -6,7 +6,12 @@ import typer
 
 from video2post.config import config_to_dict, load_config
 from video2post.downloader.ytdlp import detect_platform
-from video2post.pipeline import fetch_video_metadata, prepare_audio
+from video2post.pipeline import (
+    fetch_video_metadata,
+    generate_outputs,
+    prepare_audio,
+    transcribe_audio,
+)
 from video2post.writers.workspace import create_task_workspace
 
 
@@ -42,6 +47,27 @@ def process(
             help="Download and normalize audio after creating the task workspace.",
         ),
     ] = True,
+    transcribe: Annotated[
+        bool,
+        typer.Option(
+            "--transcribe/--no-transcribe",
+            help="Run English ASR after audio preparation.",
+        ),
+    ] = True,
+    generate: Annotated[
+        bool,
+        typer.Option(
+            "--generate/--no-generate",
+            help="Generate derivative Markdown files with the configured LLM.",
+        ),
+    ] = False,
+    targets: Annotated[
+        str | None,
+        typer.Option(
+            "--targets",
+            help="Comma-separated generation targets, e.g. article,script,titles.",
+        ),
+    ] = None,
     cleanup_source: Annotated[
         bool | None,
         typer.Option(
@@ -72,6 +98,20 @@ def process(
         fetch_video_metadata(metadata.task_dir / "meta.json")
         audio_path = prepare_audio(metadata.task_dir / "meta.json", loaded_config)
         typer.echo(f"Audio: {audio_path}")
+        if transcribe:
+            transcript_path = transcribe_audio(metadata.task_dir / "meta.json", loaded_config)
+            typer.echo(f"Transcript: {transcript_path}")
+            if generate:
+                selected_targets = _parse_targets(targets)
+                generated_paths = generate_outputs(
+                    metadata.task_dir / "meta.json",
+                    loaded_config,
+                    targets=selected_targets,
+                )
+                for generated_path in generated_paths:
+                    typer.echo(f"Generated: {generated_path}")
+        else:
+            typer.echo("Transcription skipped.")
     else:
         typer.echo("Download skipped.")
 
@@ -86,3 +126,9 @@ def show_config(
     """Print the effective configuration."""
     loaded_config = load_config(config)
     typer.echo(json.dumps(config_to_dict(loaded_config), indent=2, ensure_ascii=False))
+
+
+def _parse_targets(raw_targets: str | None) -> list[str] | None:
+    if not raw_targets:
+        return None
+    return [target.strip() for target in raw_targets.split(",") if target.strip()]

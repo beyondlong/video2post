@@ -54,3 +54,33 @@ def test_generate_outputs_writes_requested_files_and_updates_metadata(tmp_path):
     loaded = read_metadata(tmp_path / "meta.json")
     assert loaded.status == TaskStatus.TITLES_GENERATED
     assert loaded.llm_model == "fake-llm"
+
+
+def test_generate_outputs_uses_default_targets(tmp_path):
+    metadata = TaskMetadata(
+        source_url="https://youtu.be/test",
+        platform="youtube",
+        task_dir=tmp_path,
+        video=VideoMetadata(title="Test Video"),
+    )
+    write_metadata(metadata)
+    (tmp_path / "transcript.en.md").write_text("English transcript", encoding="utf-8")
+    prompt_dir = tmp_path / "prompts"
+    prompt_dir.mkdir()
+    for name in ["translation", "notes", "article", "script", "titles"]:
+        (prompt_dir / f"{name}.md").write_text(name, encoding="utf-8")
+
+    outputs = generate_outputs(
+        tmp_path / "meta.json",
+        AppConfig(),
+        provider=FakeProvider(),
+        prompt_dir=prompt_dir,
+    )
+
+    assert [path.name for path in outputs] == [
+        "transcript.zh.md",
+        "notes.md",
+        "article.md",
+        "script.md",
+        "titles.md",
+    ]
