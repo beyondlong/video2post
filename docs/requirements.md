@@ -298,6 +298,33 @@ CLI MVP
 - Web 后端预留：FastAPI
 - 桌面端预留：Tauri
 
+### 8.1.1 运行环境
+
+第一版优先支持 macOS，后续再考虑 Linux 和 Windows。
+
+macOS 优先的原因：
+
+- 项目作者当前开发和使用环境优先面向 macOS。
+- Homebrew 安装 `ffmpeg` 等系统依赖较方便。
+- 先减少跨平台适配成本，把主要精力放在内容生产 pipeline 上。
+
+第一版建议环境：
+
+- macOS
+- Python 3.11+
+- ffmpeg
+- yt-dlp
+- faster-whisper
+- FunASR
+- 云端大模型 API Key
+
+后续跨平台支持策略：
+
+- Linux 作为第二优先级。
+- Windows 暂不作为第一版目标，可在 CLI MVP 稳定后再评估。
+- 尽量避免在核心 pipeline 中写死 macOS 专有路径。
+- 系统依赖安装说明应独立维护，便于后续增加 Linux/Windows 章节。
+
 ### 8.2 CLI 框架
 
 推荐：
@@ -454,6 +481,87 @@ LLM 层需要抽象为独立模块，避免绑定单一供应商。建议统一�
 - 保持适合中文技术读者的表达。
 - 明确区分“原视频观点”和“整理者补充说明”。
 
+### 8.7.1 LLM Provider 抽象
+
+LLM 调用需要在第一版就做成可替换 Provider，而不是把某个供应商 API 写死在业务流程中。
+
+第一版推荐优先支持 OpenAI-compatible API。
+
+原因：
+
+- 很多云端模型服务都兼容 OpenAI 风格接口。
+- 后续可以较低成本接入 OpenAI、通义千问、DeepSeek、硅基流动等服务。
+- 也方便将来接入本地 Ollama 或其他自部署模型。
+
+建议抽象能力：
+
+```text
+LLMProvider
+  - generate(prompt, context, options)
+  - generate_translation(transcript)
+  - generate_notes(transcript)
+  - generate_article(notes, transcript)
+  - generate_script(notes, transcript)
+  - generate_titles(notes, article)
+```
+
+建议配置项：
+
+```yaml
+llm:
+  provider: openai_compatible
+  base_url: https://api.example.com/v1
+  model: example-model
+  temperature: 0.7
+  max_tokens: 4096
+```
+
+API Key 不应写入 `config.yaml`，应通过 `.env` 或系统环境变量提供。
+
+### 8.7.2 Prompt 模板管理
+
+二创生成提示词需要独立管理，避免散落在代码中。
+
+建议目录：
+
+```text
+prompts/
+  translation.md
+  notes.md
+  article.md
+  script.md
+  titles.md
+```
+
+Prompt 模板应支持变量注入，例如：
+
+```text
+{{ video_title }}
+{{ video_author }}
+{{ platform }}
+{{ transcript }}
+{{ notes }}
+{{ target_style }}
+```
+
+这样后续可以在不改代码的情况下持续调整内容风格。
+
+第一版重点维护的模板：
+
+- `translation.md`：英文逐字稿转中文整理稿。
+- `notes.md`：提取核心观点、术语、案例、金句和二创角度。
+- `article.md`：生成中文技术长文或公众号草稿。
+- `script.md`：生成 1-3 分钟短视频口播稿。
+- `titles.md`：生成多种发布场景的标题候选。
+
+Prompt 模板原则：
+
+- 明确要求基于原视频内容。
+- 明确禁止虚构事实。
+- 明确输出结构。
+- 区分“原视频内容”和“整理者补充说明”。
+- 优先服务中文技术读者。
+
 ### 8.8 配置管理
 
 建议使用：
@@ -590,6 +698,41 @@ SQLite 主要保存：
 - 如果已存在 `transcript.en.md`，可以跳过转写。
 - 如果只想重新生成 `article.md`，不需要重新下载和转写。
 
+建议为每个任务维护明确状态，状态写入 `meta.json`。
+
+任务状态示例：
+
+```text
+created
+metadata_fetched
+audio_downloaded
+audio_normalized
+transcribed
+translated_or_cleaned
+notes_generated
+article_generated
+script_generated
+titles_generated
+completed
+failed
+```
+
+每个阶段完成后立即落盘。失败时应记录：
+
+- 当前阶段。
+- 错误类型。
+- 错误信息。
+- 是否可以重试。
+
+CLI 后续可以提供重跑能力：
+
+```bash
+video2post retry ./outputs/task-dir
+video2post generate ./outputs/task-dir --targets article,titles
+```
+
+这能避免长视频处理失败后从头下载或重新转写。
+
 ### 9.2 可人工校对
 
 所有输出都应是可编辑文本文件，优先使用 Markdown。
@@ -616,9 +759,337 @@ SQLite 主要保存：
 
 这样后续做 Web UI 或桌面应用时，可以直接复用 Pipeline。
 
-## 10. 后续演进路线
+### 9.4 长视频处理
 
-### 10.1 阶段一：CLI MVP
+YouTube 技术视频经常达到 30-90 分钟，第一版需要提前考虑长视频处理策略。
+
+长视频主要风险：
+
+- 音频文件较大，下载和转码时间长。
+- ASR 推理耗时较长。
+- 逐字稿过长，可能超过大模型上下文限制。
+- 一次性生成文章容易丢失细节或结构混乱。
+
+建议策略：
+
+- ASR 阶段按时间 segment 输出，不只保存整段文本。
+- LLM 阶段采用分块处理。
+- 先对每个分块生成局部摘要。
+- 再基于局部摘要生成全局笔记。
+- 最后基于全局笔记和必要原文片段生成文章、口播稿和标题。
+
+分块策略示例：
+
+```text
+transcript segments
+  -> chunk 1 summary
+  -> chunk 2 summary
+  -> chunk 3 summary
+  -> global notes
+  -> article / script / titles
+```
+
+第一版可采用简单规则：
+
+- 按 ASR segment 累积文本长度切块。
+- 每块控制在大模型可处理上下文范围内。
+- 保留 chunk 序号和时间范围，方便回查。
+
+建议输出中间文件：
+
+```text
+chunks/
+  chunk-001.md
+  chunk-002.md
+  chunk-003.md
+summaries/
+  chunk-001.summary.md
+  chunk-002.summary.md
+  chunk-003.summary.md
+```
+
+这样既能支持长视频，也方便人工检查中间结果。
+
+## 10. 第一版开发边界与验收
+
+### 10.1 MVP 验收标准
+
+第一版 MVP 完成的标准不是功能完整，而是能稳定跑通一个真实内容生产闭环。
+
+最低验收标准：
+
+- 能通过命令行处理一个 YouTube 英文技术视频链接。
+- 能生成标准化音频文件。
+- 能生成英文逐字稿 `transcript.en.md`。
+- 能生成中文整理稿 `transcript.zh.md`。
+- 能生成内容笔记 `notes.md`。
+- 能生成技术长文草稿 `article.md`。
+- 能生成短视频口播稿 `script.md`。
+- 能生成标题候选 `titles.md`。
+- 能将任务元数据和状态写入 `meta.json`。
+- 失败时能记录失败阶段和错误信息。
+- 已完成的阶段可以跳过，避免重跑全部流程。
+
+扩展验收标准：
+
+- 能处理一个 B 站中文技术视频链接。
+- 能使用中文 ASR 生成中文逐字稿。
+- 能基于中文逐字稿生成笔记、长文、口播稿和标题。
+- 能通过 `generate` 命令重新生成部分二创产物。
+- 能通过 `retry` 命令从失败任务继续处理。
+
+### 10.2 第一版最小命令集
+
+第一版只实现必要命令，避免 CLI 过早复杂化。
+
+必须实现：
+
+```bash
+video2post URL
+```
+
+用途：
+
+- 自动识别平台。
+- 下载音频。
+- 执行转写。
+- 执行 LLM 生成。
+- 输出完整任务目录。
+
+建议实现：
+
+```bash
+video2post retry TASK_DIR
+```
+
+用途：
+
+- 从已有任务目录读取 `meta.json`。
+- 根据任务状态继续未完成阶段。
+
+```bash
+video2post generate TASK_DIR --targets article,script,titles
+```
+
+用途：
+
+- 基于已有逐字稿和笔记重新生成指定二创内容。
+- 不重新下载音频。
+- 不重新执行 ASR。
+
+```bash
+video2post config show
+```
+
+用途：
+
+- 查看当前生效配置。
+- 帮助排查 API、模型和输出目录问题。
+
+暂缓实现：
+
+- 批量处理命令。
+- 自动发布命令。
+- 任务列表命令。
+- Web 服务启动命令。
+
+### 10.3 配置文件规范
+
+项目应提供 `.env.example` 和 `config.example.yaml`，降低本地启动成本。
+
+`.env.example` 示例：
+
+```bash
+VIDEO2POST_LLM_API_KEY=
+VIDEO2POST_LLM_BASE_URL=
+VIDEO2POST_LLM_MODEL=
+```
+
+`config.example.yaml` 示例：
+
+```yaml
+app:
+  output_dir: outputs
+  keep_audio: true
+  skip_existing: true
+
+download:
+  preferred_audio_format: wav
+  cookies_file:
+  cookies_from_browser:
+
+audio:
+  sample_rate: 16000
+  channels: 1
+
+asr:
+  default_language: auto
+  english_provider: faster_whisper
+  chinese_provider: funasr
+  faster_whisper_model: medium
+  funasr_model: paraformer
+
+llm:
+  provider: openai_compatible
+  base_url:
+  model:
+  temperature: 0.7
+  max_tokens: 4096
+
+generation:
+  default_targets:
+    - translation
+    - notes
+    - article
+    - script
+    - titles
+  chunk_max_chars: 6000
+```
+
+配置原则：
+
+- API Key 只放 `.env` 或系统环境变量。
+- `config.yaml` 不提交真实密钥。
+- 示例配置可以提交到仓库。
+- CLI 参数优先级高于配置文件。
+- 配置文件优先级高于默认值。
+
+### 10.4 输出 Markdown 模板规范
+
+第一版输出文件应采用稳定、可读、可人工编辑的 Markdown 结构。
+
+通用要求：
+
+- 文件开头包含视频标题、平台、原始链接和生成时间。
+- 对于转写内容，尽量保留时间戳。
+- 对于二创内容，明确区分正文、摘要、标题和备注。
+- 不在 Markdown 中写入 API Key 或敏感配置。
+
+`transcript.en.md` 示例结构：
+
+```markdown
+# Transcript EN: {{ video_title }}
+
+- Platform: {{ platform }}
+- Source: {{ source_url }}
+- Generated At: {{ generated_at }}
+
+## Segments
+
+### [00:00:00 - 00:00:15]
+
+Original English text...
+```
+
+`transcript.zh.md` 示例结构：
+
+```markdown
+# 中文整理稿：{{ video_title }}
+
+- 平台：{{ platform }}
+- 来源：{{ source_url }}
+- 生成时间：{{ generated_at }}
+
+## 分段整理
+
+### [00:00:00 - 00:00:15]
+
+中文翻译或中文清洗内容...
+```
+
+`notes.md` 示例结构：
+
+```markdown
+# 内容笔记：{{ video_title }}
+
+## 核心观点
+
+## 技术概念
+
+## 重要案例
+
+## 可引用金句
+
+## 术语解释
+
+## 二创角度
+```
+
+`article.md` 示例结构：
+
+```markdown
+# {{ article_title }}
+
+## 摘要
+
+## 正文
+
+## 来源与备注
+```
+
+`script.md` 示例结构：
+
+```markdown
+# 短视频口播稿：{{ video_title }}
+
+## 开场钩子
+
+## 正文脚本
+
+## 结尾引导
+```
+
+`titles.md` 示例结构：
+
+```markdown
+# 标题候选：{{ video_title }}
+
+## 技术博客标题
+
+## 公众号标题
+
+## 短视频标题
+
+## 理性专业风格
+
+## 传播感风格
+```
+
+### 10.5 测试样例策略
+
+第一版开发时应准备少量稳定样例，作为手工验收和回归检查依据。
+
+建议样例：
+
+- 一个 5-10 分钟的 YouTube 英文技术视频。
+- 一个 5-10 分钟的 B 站中文技术视频。
+- 一个无效或无法访问的视频链接。
+- 一个较长的 YouTube 英文技术视频，用于验证分块策略。
+
+每个样例应记录：
+
+- 原始链接。
+- 平台。
+- 预期语言。
+- 是否需要 Cookie。
+- 预期输出文件。
+- 已知风险或备注。
+
+测试重点：
+
+- 链接解析是否正确。
+- 音频下载是否成功。
+- 音频标准化是否成功。
+- ASR 是否生成可读文本。
+- LLM 是否生成所有目标文件。
+- 失败时 `meta.json` 是否记录错误。
+- 重跑时是否跳过已完成阶段。
+
+自动化测试可以后续补充，第一版至少要保留固定样例和手工验收步骤。
+
+## 11. 后续演进路线
+
+### 11.1 阶段一：CLI MVP
 
 目标：
 
@@ -628,7 +1099,7 @@ SQLite 主要保存：
 - 云端大模型生成二创内容。
 - Markdown 输出。
 
-### 10.2 阶段二：个人 Web 工作台
+### 11.2 阶段二：个人 Web 工作台
 
 目标：
 
@@ -644,7 +1115,7 @@ SQLite 主要保存：
 - SQLite
 - React 或 Next.js
 
-### 10.3 阶段三：桌面应用
+### 11.3 阶段三：桌面应用
 
 目标：
 
@@ -658,7 +1129,7 @@ SQLite 主要保存：
 - Electron
 - Python sidecar
 
-### 10.4 阶段四：素材库和检索
+### 11.4 阶段四：素材库和检索
 
 目标：
 
@@ -667,9 +1138,9 @@ SQLite 主要保存：
 - 支持向量搜索。
 - 支持同主题视频对比总结。
 
-## 11. 风险与注意事项
+## 12. 风险与注意事项
 
-### 11.1 版权和合规
+### 12.1 版权和合规
 
 项目用于个人学习、整理和二次创作辅助。生成内容时应避免直接搬运原视频表达。
 
@@ -680,11 +1151,11 @@ SQLite 主要保存：
 - 避免大段照搬。
 - 必要时标注来源。
 
-### 11.2 平台可用性
+### 12.2 平台可用性
 
 `yt-dlp` 支持大量平台，但平台规则变化可能导致下载失败。项目需要把下载失败视为常见情况，而不是异常边缘情况。
 
-### 11.3 转写准确率
+### 12.3 转写准确率
 
 ASR 转写可能受以下因素影响：
 
@@ -697,7 +1168,7 @@ ASR 转写可能受以下因素影响：
 
 因此第一版必须保留逐字稿，允许人工校对。
 
-### 11.4 大模型幻觉
+### 12.4 大模型幻觉
 
 大模型在总结和二创时可能会补充原视频没有的信息。提示词需要明确要求：
 
@@ -706,12 +1177,11 @@ ASR 转写可能受以下因素影响：
 - 不夸大结论。
 - 对不确定内容保持谨慎。
 
-## 12. 待确认问题
+## 13. 待确认问题
 
 后续进入实现前，需要继续确认：
 
 - 第一版使用哪个云端大模型 API。
-- 是否优先支持 macOS 环境。
 - 是否需要 Docker 化。
 - 是否保留原始下载文件。
 - YouTube 英文视频是否需要同时保留英文原稿和中文翻译。

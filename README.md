@@ -98,6 +98,31 @@ outputs/
 - 云端大模型 API
 - Markdown 文件输出
 
+第一版优先支持 macOS，后续再考虑 Linux 和 Windows。核心 pipeline 会避免写死 macOS 专有路径，为后续跨平台留出空间。
+
+第一版工程重点：
+
+- 任务状态和断点续跑：每个阶段完成后落盘，失败后可从中间步骤继续。
+- LLM Provider 抽象：优先支持 OpenAI-compatible API，后续可扩展其他云端模型或本地模型。
+- Prompt 模板管理：将翻译、笔记、长文、口播稿和标题模板独立维护。
+- 长视频分块处理：转写结果按 segment 保存，LLM 阶段分块总结再汇总生成。
+
+第一版 MVP 验收重点：
+
+- 能处理一个 YouTube 英文技术视频链接。
+- 能生成 `meta.json`、`audio.wav`、`transcript.en.md`、`transcript.zh.md`、`notes.md`、`article.md`、`script.md` 和 `titles.md`。
+- 失败时能记录失败阶段和错误信息。
+- 已完成阶段可以跳过，支持后续重跑和重新生成二创内容。
+
+第一版最小命令集：
+
+```bash
+video2post URL
+video2post retry TASK_DIR
+video2post generate TASK_DIR --targets article,script,titles
+video2post config show
+```
+
 后续预留方向：
 
 - Web 后端：FastAPI
