@@ -33,7 +33,7 @@ class FakeHttpClient:
                 "choices": [
                     {
                         "message": {
-                            "content": "Generated content",
+                            "content": "<think>hidden</think>\n\nGenerated content",
                         }
                     }
                 ]

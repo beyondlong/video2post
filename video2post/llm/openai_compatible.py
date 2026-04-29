@@ -5,6 +5,7 @@ import httpx
 from dotenv import load_dotenv
 
 from video2post.config import LlmSettings
+from video2post.llm.cleaning import clean_llm_output
 
 
 class OpenAICompatibleProvider:
@@ -46,4 +47,4 @@ class OpenAICompatibleProvider:
         )
         response.raise_for_status()
         data = response.json()
-        return data["choices"][0]["message"]["content"]
+        return clean_llm_output(data["choices"][0]["message"]["content"])
