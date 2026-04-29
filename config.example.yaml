@@ -1,0 +1,36 @@
+app:
+  output_dir: outputs
+  keep_audio: true
+  skip_existing: true
+
+download:
+  preferred_audio_format: wav
+  cookies_file:
+  cookies_from_browser:
+
+audio:
+  sample_rate: 16000
+  channels: 1
+
+asr:
+  default_language: auto
+  english_provider: faster_whisper
+  chinese_provider: funasr
+  faster_whisper_model: medium
+  funasr_model: paraformer
+
+llm:
+  provider: openai_compatible
+  base_url:
+  model:
+  temperature: 0.7
+  max_tokens: 4096
+
+generation:
+  default_targets:
+    - translation
+    - notes
+    - article
+    - script
+    - titles
+  chunk_max_chars: 6000
