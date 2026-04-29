@@ -1,0 +1,439 @@
+# video2post 当前进度记录
+
+> 更新时间：2026-04-29
+>
+> 当前开发分支：`codex/phase-0-cli-skeleton`
+>
+> 最新进度提交：`055a1d6 feat: add retry and generate commands`
+
+本文档用于记录项目当前已经完成的能力、可测试效果和后续建议。`docs/development-plan.md` 继续作为开发计划使用，本文档记录真实落地进度。
+
+## 当前整体状态
+
+`video2post` 当前已经具备 YouTube 方向 CLI MVP 的核心骨架：
+
+- 可以通过 CLI 创建视频处理任务。
+- 可以获取 YouTube 视频元数据，并使用视频标题生成任务目录。
+- 可以下载 YouTube 音频并标准化为 `audio.wav`。
+- 可以接入 `faster-whisper` 生成英文转写稿。
+- 可以通过 OpenAI-compatible LLM Provider 生成中文二创内容。
+- 可以对已有任务做局部生成和断点续跑。
+- 当前自动化测试通过：`38 passed`。
+
+目前项目还处于个人自用 MVP 阶段，优先目标仍然是先把 YouTube 英文技术视频到中文二创内容的流程跑稳。
+
+## 已完成能力
+
+### 1. 项目基础骨架
+
+已建立 Python CLI 项目结构：
+
+```text
+video2post/
+  cli.py
+  config.py
+  pipeline.py
+  models.py
+  downloader/
+  audio/
+  asr/
+  llm/
+  writers/
+tests/
+docs/
+prompts/
+.env.example
+config.example.yaml
+pyproject.toml
+README.md
+```
+
+已完成内容：
+
+- Python 项目配置。
+- Typer CLI 入口。
+- Pydantic 配置模型。
+- 基础测试目录。
+- README 和需求文档。
+- `.gitignore`，避免提交编译产物、缓存、中间输出和本地密钥。
+
+### 2. 任务目录、元数据和状态模型
+
+每个视频会生成独立任务目录，例如：
+
+```text
+outputs/
+  2026-04-29-video-title/
+    meta.json
+    audio.wav
+    transcript.en.md
+    transcript.zh.md
+    notes.md
+    article.md
+    script.md
+    titles.md
+```
+
+已支持：
+
+- 创建任务目录。
+- 使用视频标题生成更友好的任务目录名。
+- 写入和读取 `meta.json`。
+- 记录任务状态。
+- 记录视频标题、作者、时长等元数据。
+- 记录失败阶段、错误信息和是否可重试。
+
+当前任务状态包括：
+
+```text
+created
+metadata_fetched
+audio_downloaded
+audio_normalized
+transcribed
+translated_or_cleaned
+notes_generated
+article_generated
+script_generated
+titles_generated
+completed
+failed
+```
+
+### 3. YouTube 音频下载与标准化
+
+已接入：
+
+- `yt-dlp`
+- `ffmpeg`
+
+当前流程：
+
+```text
+YouTube URL
+  -> 获取视频元数据
+  -> 下载压缩音频 source.webm / source.m4a
+  -> 转换为 audio.wav
+  -> 可选删除中间 source 文件
+```
+
+标准化音频格式：
+
+```text
+WAV
+16kHz
+mono
+pcm_s16le
+```
+
+已经用真实 YouTube 链接测试过，最终 `audio.wav` 产物格式正确。
+
+测试链接：
+
+```text
+https://www.youtube.com/watch?v=474wZZHoWN4
+```
+
+真实测试结果：
+
+- 可以获取视频元数据。
+- 可以生成标准化 `audio.wav`。
+- `audio.wav` 为 16kHz、mono、`pcm_s16le`。
+- 支持清理下载后的压缩源音频。
+
+### 4. 中间文件清理
+
+支持在音频标准化后删除下载的压缩源文件，只保留最终 `audio.wav`。
+
+可用参数：
+
+```bash
+video2post process URL --cleanup-source
+video2post process URL --keep-source
+```
+
+作用：
+
+- `--cleanup-source`：删除 `source.webm` / `source.m4a` 等中间源文件，节省磁盘空间。
+- `--keep-source`：保留下载的压缩源文件，方便调试或复查。
+
+### 5. 英文 ASR 转写
+
+已接入：
+
+- `faster-whisper`
+
+当前能力：
+
+- 从 `audio.wav` 生成英文转写稿。
+- 输出 `transcript.en.md`。
+- 保留 segment 时间戳。
+- 支持跳过已存在转写文件。
+
+当前统一 segment 结构：
+
+```text
+start
+end
+text
+language
+```
+
+### 6. LLM Provider 与 Prompt 模板
+
+已实现 OpenAI-compatible LLM Provider。
+
+支持通过 `.env` 配置：
+
+```bash
+VIDEO2POST_LLM_API_KEY=
+VIDEO2POST_LLM_BASE_URL=
+VIDEO2POST_LLM_MODEL=
+```
+
+已验证 Minimax 配置：
+
+```text
+base_url=https://api.minimaxi.com/v1
+model=MiniMax-M2.5
+```
+
+真实测试结果：
+
+- 可以读取 `.env` 中的 LLM 配置。
+- 可以调用 Minimax。
+- 可以生成 `titles.md`。
+- 已处理部分模型输出中的 `<think>...</think>` 内容，避免污染最终 Markdown。
+
+当前 Prompt 模板：
+
+```text
+prompts/
+  translation.md
+  notes.md
+  article.md
+  script.md
+  titles.md
+```
+
+### 7. YouTube 主链路 CLI
+
+当前主命令：
+
+```bash
+video2post process URL
+```
+
+常用参数：
+
+```bash
+video2post process URL --output ./outputs
+video2post process URL --generate --targets titles
+video2post process URL --generate --targets article,script,titles
+video2post process URL --cleanup-source
+video2post process URL --no-transcribe
+video2post process URL --no-download
+```
+
+当前 `process` 命令能力：
+
+- 创建任务目录。
+- 获取视频元数据。
+- 下载和标准化音频。
+- 可选执行英文 ASR。
+- 可选执行 LLM 二创生成。
+- 输出任务目录路径、平台和阶段产物路径。
+
+### 8. 局部生成和断点续跑
+
+已新增两个命令：
+
+```bash
+video2post generate TASK_DIR --targets article,script,titles
+video2post retry TASK_DIR
+```
+
+`generate` 用途：
+
+- 基于已有 `meta.json` 和 `transcript.en.md` 重新生成指定二创内容。
+- 适合修改 Prompt 后重新生成文章、标题或口播稿。
+- 不需要重新下载音频或重新 ASR。
+
+`retry` 用途：
+
+- 从已有任务目录继续缺失步骤。
+- 如果已有 `audio.wav` 但缺少 `transcript.en.md`，会直接补转写。
+- 如果加上 `--generate`，可以在补齐前置步骤后继续生成二创内容。
+
+示例：
+
+```bash
+video2post generate ./outputs/2026-04-29-video-title --targets titles
+video2post retry ./outputs/2026-04-29-video-title
+video2post retry ./outputs/2026-04-29-video-title --generate --targets titles
+```
+
+## 当前可测试效果
+
+### 1. 查看 CLI 是否可用
+
+```bash
+video2post --help
+```
+
+应能看到：
+
+```text
+process
+generate
+retry
+config
+```
+
+### 2. 查看当前配置
+
+```bash
+video2post config show
+```
+
+应能看到默认配置，包括：
+
+```text
+output_dir
+openai_compatible
+```
+
+### 3. 只创建任务目录，不下载
+
+```bash
+video2post process "https://www.youtube.com/watch?v=474wZZHoWN4" --no-download
+```
+
+可验证：
+
+- 能识别 YouTube。
+- 能获取视频标题。
+- 能创建任务目录。
+- 能生成 `meta.json`。
+
+### 4. 下载并标准化音频
+
+```bash
+video2post process "https://www.youtube.com/watch?v=474wZZHoWN4" --no-transcribe --cleanup-source
+```
+
+可验证：
+
+- 生成 `audio.wav`。
+- 音频格式为 16kHz mono WAV。
+- 中间 `source.webm` / `source.m4a` 被清理。
+
+可使用 `ffprobe` 检查：
+
+```bash
+ffprobe TASK_DIR/audio.wav
+```
+
+重点检查：
+
+```text
+sample_rate=16000
+channels=1
+codec_name=pcm_s16le
+```
+
+### 5. 生成标题
+
+已有 `transcript.en.md` 后，可以测试：
+
+```bash
+video2post generate TASK_DIR --targets titles
+```
+
+可验证：
+
+- 读取 `.env` 中的大模型配置。
+- 调用配置的大模型。
+- 生成 `titles.md`。
+- 更新 `meta.json` 中的 LLM 模型和任务状态。
+
+### 6. 断点续跑
+
+如果任务目录里已有 `audio.wav`，但没有 `transcript.en.md`：
+
+```bash
+video2post retry TASK_DIR
+```
+
+可验证：
+
+- 不重新下载音频。
+- 直接进入转写阶段。
+- 生成 `transcript.en.md`。
+
+如果已有转写稿：
+
+```bash
+video2post retry TASK_DIR --generate --targets titles
+```
+
+可验证：
+
+- 不重复下载。
+- 不重复转写。
+- 只生成指定二创产物。
+
+## 自动化测试状态
+
+当前全量测试通过：
+
+```bash
+python3 -m pytest -q
+# 38 passed
+```
+
+当前测试覆盖方向：
+
+- CLI help。
+- 配置读取和展示。
+- 任务目录创建。
+- 配置输出目录和命令行输出目录覆盖。
+- 中间源文件清理参数。
+- YouTube pipeline 编排。
+- 跳过下载、跳过转写。
+- LLM 生成命令。
+- 断点续跑命令。
+- 任务元数据读写。
+- 音频下载与标准化逻辑。
+- ASR 转写逻辑。
+- LLM Prompt 和 Provider 逻辑。
+
+## 当前限制
+
+目前仍然没有完成：
+
+- 长视频分块处理。
+- B 站中文视频完整链路。
+- 中文 ASR Provider。
+- Web 工作台。
+- 桌面应用。
+- 批量任务队列。
+- 自动发布到公众号、微博、小红书、B 站等平台。
+- 素材库和检索。
+
+当前一个明显风险是：长视频在 LLM 阶段可能因为上下文过长而失败。因此下一步更适合先做长视频分块处理，而不是急着扩展更多平台。
+
+## 下一步建议
+
+优先进入阶段 7：长视频分块处理。
+
+建议顺序：
+
+1. 基于 `transcript.en.md` 或 ASR segment 做文本切块。
+2. 输出 `chunks/chunk-001.md` 等中间文件。
+3. 为每个 chunk 生成局部摘要。
+4. 输出 `summaries/chunk-001.summary.md` 等中间文件。
+5. 基于局部摘要生成全局笔记。
+6. 再基于全局笔记生成长文、口播稿和标题。
+
+这样可以让 30-90 分钟技术视频更稳定，也更适合后续真实自媒体工作流。
