@@ -14,7 +14,7 @@ from video2post.pipeline import (
     prepare_audio,
     transcribe_audio,
 )
-from video2post.writers.metadata import write_metadata
+from video2post.writers.metadata import read_metadata, write_metadata
 from video2post.writers.workspace import create_task_workspace
 
 
@@ -121,6 +121,85 @@ def process(
         typer.echo("Download skipped.")
 
 
+@app.command("generate")
+def generate_command(
+    task_dir: Annotated[Path, typer.Argument(help="Existing video2post task directory.")],
+    config: Annotated[
+        Path | None,
+        typer.Option("--config", "-c", help="Path to config.yaml."),
+    ] = None,
+    targets: Annotated[
+        str | None,
+        typer.Option(
+            "--targets",
+            help="Comma-separated generation targets, e.g. article,script,titles.",
+        ),
+    ] = None,
+) -> None:
+    """Regenerate derivative Markdown files for an existing task."""
+    loaded_config = load_config(config)
+    metadata_path = _metadata_path(task_dir)
+    generated_paths = generate_outputs(
+        metadata_path,
+        loaded_config,
+        targets=_parse_targets(targets),
+    )
+    _echo_generated_paths(generated_paths)
+
+
+@app.command()
+def retry(
+    task_dir: Annotated[Path, typer.Argument(help="Existing video2post task directory.")],
+    config: Annotated[
+        Path | None,
+        typer.Option("--config", "-c", help="Path to config.yaml."),
+    ] = None,
+    generate: Annotated[
+        bool,
+        typer.Option(
+            "--generate/--no-generate",
+            help="Generate derivative Markdown files after missing earlier steps are restored.",
+        ),
+    ] = False,
+    targets: Annotated[
+        str | None,
+        typer.Option(
+            "--targets",
+            help="Comma-separated generation targets, e.g. article,script,titles.",
+        ),
+    ] = None,
+) -> None:
+    """Resume a task by running missing artifacts from its task directory."""
+    loaded_config = load_config(config)
+    metadata_path = _metadata_path(task_dir)
+    metadata = read_metadata(metadata_path)
+    audio_path = metadata.task_dir / "audio.wav"
+    transcript_path = metadata.task_dir / "transcript.en.md"
+    did_work = False
+
+    if not audio_path.exists():
+        audio_path = prepare_audio(metadata_path, loaded_config)
+        typer.echo(f"Audio: {audio_path}")
+        did_work = True
+
+    if not transcript_path.exists():
+        transcript_path = transcribe_audio(metadata_path, loaded_config)
+        typer.echo(f"Transcript: {transcript_path}")
+        did_work = True
+
+    if generate:
+        generated_paths = generate_outputs(
+            metadata_path,
+            loaded_config,
+            targets=_parse_targets(targets),
+        )
+        _echo_generated_paths(generated_paths)
+        did_work = True
+
+    if not did_work:
+        typer.echo("Nothing to retry.")
+
+
 @config_app.command("show")
 def show_config(
     config: Annotated[
@@ -137,6 +216,15 @@ def _parse_targets(raw_targets: str | None) -> list[str] | None:
     if not raw_targets:
         return None
     return [target.strip() for target in raw_targets.split(",") if target.strip()]
+
+
+def _metadata_path(task_dir: Path) -> Path:
+    return task_dir / "meta.json"
+
+
+def _echo_generated_paths(generated_paths: list[Path]) -> None:
+    for generated_path in generated_paths:
+        typer.echo(f"Generated: {generated_path}")
 
 
 def fetch_initial_video_metadata(url: str) -> VideoMetadata:

@@ -24,19 +24,18 @@ video2post
 示例用法：
 
 ```bash
-video2post "https://www.youtube.com/watch?v=xxxx"
-video2post "https://www.bilibili.com/video/BVxxxx"
+video2post process "https://www.youtube.com/watch?v=xxxx"
+video2post process "https://www.bilibili.com/video/BVxxxx"
 ```
 
 可选参数方向：
 
 ```bash
-video2post URL --platform youtube
-video2post URL --platform bilibili
-video2post URL --lang en
-video2post URL --lang zh
-video2post URL --targets article,script,titles
-video2post URL --output ./outputs
+video2post process URL --output ./outputs
+video2post process URL --generate --targets article,script,titles
+video2post process URL --cleanup-source
+video2post process URL --no-transcribe
+video2post process URL --no-download
 ```
 
 ## 处理流程
@@ -117,7 +116,7 @@ outputs/
 第一版最小命令集：
 
 ```bash
-video2post URL
+video2post process URL
 video2post retry TASK_DIR
 video2post generate TASK_DIR --targets article,script,titles
 video2post config show
