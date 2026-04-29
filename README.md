@@ -1,0 +1,201 @@
+# video2post
+
+`video2post` 是一个面向技术博主和内容创作者的本地内容生产工具。它的目标是把高质量视频内容，尤其是 YouTube 英文技术视频和 B 站中文技术视频，转化为可编辑、可二次创作、可发布的中文内容素材。
+
+项目当前处于早期规划和 MVP 阶段，第一版会优先做成本地 CLI 工具，用最短路径跑通“视频链接 -> 音频 -> 转写 -> 中文整理 -> 二创文案”的完整流程。
+
+## 核心目标
+
+- 支持 YouTube 和 B 站视频链接。
+- 自动下载或提取视频音频。
+- 将 YouTube 英文技术视频转写并整理为中文内容。
+- 将 B 站中文技术视频转写并结构化整理。
+- 生成技术长文、短视频口播稿、标题候选和内容笔记。
+- 所有中间结果和最终结果都保存为本地文件，方便人工校对和复用。
+
+## 第一版形态
+
+第一版采用 CLI-first 路线，暂定命令名：
+
+```bash
+video2post
+```
+
+示例用法：
+
+```bash
+video2post "https://www.youtube.com/watch?v=xxxx"
+video2post "https://www.bilibili.com/video/BVxxxx"
+```
+
+可选参数方向：
+
+```bash
+video2post URL --platform youtube
+video2post URL --platform bilibili
+video2post URL --lang en
+video2post URL --lang zh
+video2post URL --targets article,script,titles
+video2post URL --output ./outputs
+```
+
+## 处理流程
+
+```text
+视频链接
+  -> 平台识别
+  -> 视频元数据提取
+  -> 音频下载
+  -> 音频格式标准化
+  -> 语音转文字
+  -> 文本清洗和分段
+  -> 中文翻译或中文整理
+  -> 二创内容生成
+  -> Markdown 文件输出
+```
+
+## 输出示例
+
+每个视频会生成一个独立输出目录：
+
+```text
+outputs/
+  2026-04-29-video-title/
+    meta.json
+    audio.wav
+    transcript.en.md
+    transcript.zh.md
+    notes.md
+    article.md
+    script.md
+    titles.md
+```
+
+文件说明：
+
+- `meta.json`：视频信息、处理状态、模型信息和错误信息。
+- `audio.wav`：标准化后的音频文件。
+- `transcript.en.md`：YouTube 英文视频的英文逐字稿。
+- `transcript.zh.md`：中文翻译或中文整理稿。
+- `notes.md`：核心观点、技术概念、金句和二创角度。
+- `article.md`：技术博客或公众号长文草稿。
+- `script.md`：短视频口播稿。
+- `titles.md`：不同发布场景的标题候选。
+
+## 技术路线
+
+项目采用 Python 作为主语言，核心逻辑会沉淀为可复用 pipeline。CLI、Web 和桌面应用都只作为入口层，避免后续重复实现下载、转写和生成逻辑。
+
+第一版推荐技术栈：
+
+- Python
+- Typer
+- Pydantic
+- yt-dlp
+- ffmpeg
+- faster-whisper
+- FunASR
+- 云端大模型 API
+- Markdown 文件输出
+
+后续预留方向：
+
+- Web 后端：FastAPI
+- Web 前端：React / Vite
+- 数据存储：SQLite
+- 桌面应用：Tauri + React + Python sidecar
+
+## ASR 方案
+
+第一版会预留统一 ASR 接口，但实现顺序建议分阶段推进：
+
+1. 优先跑通 `faster-whisper + YouTube`。
+2. 再接入 `FunASR + B 站`。
+3. 后续再考虑 WhisperX、说话人分离、词级时间戳等高级能力。
+
+统一 ASR 输出结构应尽量保持稳定：
+
+```text
+segments:
+  - start
+  - end
+  - text
+  - language
+```
+
+## 大模型生成
+
+第一版采用本地运行工具 + 云端大模型 API 的方式。
+
+大模型主要负责：
+
+- 英文转中文。
+- 内容总结。
+- 结构化整理。
+- 技术长文生成。
+- 短视频口播稿生成。
+- 标题生成。
+
+提示词需要明确约束：
+
+- 不虚构事实。
+- 不添加原视频没有的数据。
+- 不直接搬运原文表达。
+- 保持适合中文技术读者的表达。
+- 明确区分原视频观点和整理者补充说明。
+
+## 路线图
+
+### 阶段一：CLI MVP
+
+- 单链接处理。
+- 支持 YouTube 和 B 站。
+- 本地 ASR。
+- 云端大模型生成二创内容。
+- Markdown 文件输出。
+- 支持阶段性重跑，避免失败后从头开始。
+
+### 阶段二：个人 Web 工作台
+
+- Web 页面粘贴链接。
+- 查看任务进度。
+- 在线查看和编辑逐字稿。
+- 一键重新生成长文、口播稿和标题。
+- 保存历史任务。
+
+### 阶段三：桌面应用
+
+- 更适合个人日常使用。
+- 简化本地启动体验。
+- 提供更完整的素材管理和编辑体验。
+
+### 阶段四：素材库和检索
+
+- 保存长期处理过的视频内容。
+- 支持按主题、作者、关键词检索。
+- 支持向量搜索。
+- 支持同主题视频对比总结。
+
+## 当前非目标
+
+第一版暂不计划支持：
+
+- 抖音、视频号等平台。
+- 多用户系统。
+- 登录、权限、计费。
+- Web UI。
+- 桌面客户端。
+- 批量任务队列。
+- 自动发布到公众号、微博、小红书、B 站等平台。
+- 视频剪辑、自动配图、自动配音。
+- 向量检索或长期素材库。
+
+## 注意事项
+
+本项目用于个人学习、整理和二次创作辅助。生成内容时应尊重原作者，避免直接搬运原视频表达，必要时标注来源。
+
+视频平台规则可能变化，下载能力依赖 `yt-dlp` 的实际支持情况。部分平台或链接可能需要 Cookie，也可能出现下载失败。后续应考虑支持本地音频或视频文件输入作为兜底方案。
+
+## 文档
+
+更完整的需求说明见 [docs/requirements.md](docs/requirements.md)。
