@@ -63,7 +63,8 @@ def test_download_audio_builds_expected_command(tmp_path):
 
     command, kwargs = runner.calls[0]
     assert command[:4] == ["yt-dlp", "--no-playlist", "-f", "bestaudio/best"]
-    assert "--extract-audio" in command
+    assert "--extract-audio" not in command
+    assert "--audio-format" not in command
     assert command[command.index("-o") + 1] == str(target)
     assert command[-1] == "https://youtu.be/abc"
     assert kwargs["check"] is True
