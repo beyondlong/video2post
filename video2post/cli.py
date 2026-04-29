@@ -5,6 +5,9 @@ from typing import Annotated
 import typer
 
 from video2post.config import config_to_dict, load_config
+from video2post.downloader.ytdlp import detect_platform
+from video2post.pipeline import fetch_video_metadata, prepare_audio
+from video2post.writers.workspace import create_task_workspace
 
 
 app = typer.Typer(
@@ -28,11 +31,37 @@ def process(
         Path | None,
         typer.Option("--config", "-c", help="Path to config.yaml."),
     ] = None,
+    output: Annotated[
+        Path | None,
+        typer.Option("--output", "-o", help="Override configured output directory."),
+    ] = None,
+    download: Annotated[
+        bool,
+        typer.Option(
+            "--download/--no-download",
+            help="Download and normalize audio after creating the task workspace.",
+        ),
+    ] = True,
 ) -> None:
     """Process a video URL through the local pipeline."""
-    _ = load_config(config)
-    typer.echo("Pipeline is not implemented yet.")
-    typer.echo(f"URL: {url}")
+    loaded_config = load_config(config)
+    output_dir = output or loaded_config.app.output_dir
+    platform = detect_platform(url)
+    metadata = create_task_workspace(
+        output_dir=output_dir,
+        source_url=url,
+        platform=platform,
+        title="untitled",
+    )
+    typer.echo(f"Task directory: {metadata.task_dir}")
+    typer.echo(f"Platform: {platform}")
+
+    if download:
+        fetch_video_metadata(metadata.task_dir / "meta.json")
+        audio_path = prepare_audio(metadata.task_dir / "meta.json", loaded_config)
+        typer.echo(f"Audio: {audio_path}")
+    else:
+        typer.echo("Download skipped.")
 
 
 @config_app.command("show")
