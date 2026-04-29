@@ -7,7 +7,7 @@ from video2post.config import AppConfig
 from video2post.downloader.ytdlp import YtDlpDownloader
 from video2post.llm.openai_compatible import OpenAICompatibleProvider
 from video2post.llm.prompts import PromptRenderer
-from video2post.models import TaskStatus
+from video2post.models import TaskMetadata, TaskStatus
 from video2post.writers.markdown import write_markdown
 from video2post.writers.metadata import read_metadata, update_status
 from video2post.writers.metadata import write_metadata
@@ -154,6 +154,13 @@ def generate_outputs(
     generated_paths: list[Path] = []
 
     try:
+        generation_transcript = _prepare_generation_transcript(
+            metadata,
+            transcript,
+            config,
+            renderer,
+            active_provider,
+        )
         for target in selected_targets:
             if target not in TARGET_OUTPUTS:
                 raise ValueError(f"Unknown generation target: {target}")
@@ -164,7 +171,7 @@ def generate_outputs(
                     "video_title": metadata.video.title or "untitled",
                     "platform": metadata.platform,
                     "source_url": metadata.source_url,
-                    "transcript": transcript,
+                    "transcript": generation_transcript,
                 },
             )
             content = active_provider.generate(prompt)
@@ -184,3 +191,67 @@ def generate_outputs(
             retryable=True,
         )
         raise
+
+
+def _prepare_generation_transcript(
+    metadata: TaskMetadata,
+    transcript: str,
+    config: AppConfig,
+    renderer: PromptRenderer,
+    provider: OpenAICompatibleProvider,
+) -> str:
+    if len(transcript) <= config.generation.chunk_max_chars:
+        return transcript
+
+    chunks = _split_text_into_chunks(transcript, config.generation.chunk_max_chars)
+    chunk_dir = metadata.task_dir / "chunks"
+    summary_dir = metadata.task_dir / "summaries"
+    chunk_dir.mkdir(parents=True, exist_ok=True)
+    summary_dir.mkdir(parents=True, exist_ok=True)
+
+    summaries: list[str] = []
+    chunk_count = len(chunks)
+    for index, chunk in enumerate(chunks, start=1):
+        chunk_path = chunk_dir / f"chunk-{index:03d}.md"
+        summary_path = summary_dir / f"chunk-{index:03d}.summary.md"
+        write_markdown(chunk_path, chunk)
+
+        prompt = renderer.render(
+            "chunk_summary",
+            {
+                "video_title": metadata.video.title or "untitled",
+                "platform": metadata.platform,
+                "source_url": metadata.source_url,
+                "chunk_index": index,
+                "chunk_count": chunk_count,
+                "transcript_chunk": chunk,
+            },
+        )
+        summary = provider.generate(prompt)
+        write_markdown(summary_path, summary)
+        summaries.append(summary)
+
+    return "\n\n".join(summaries)
+
+
+def _split_text_into_chunks(text: str, max_chars: int) -> list[str]:
+    paragraphs = [paragraph.strip() for paragraph in text.split("\n\n") if paragraph.strip()]
+    chunks: list[str] = []
+    current_parts: list[str] = []
+    current_size = 0
+
+    for paragraph in paragraphs:
+        separator_size = 2 if current_parts else 0
+        next_size = current_size + separator_size + len(paragraph)
+        if current_parts and next_size > max_chars:
+            chunks.append("\n\n".join(current_parts))
+            current_parts = [paragraph]
+            current_size = len(paragraph)
+        else:
+            current_parts.append(paragraph)
+            current_size = next_size
+
+    if current_parts:
+        chunks.append("\n\n".join(current_parts))
+
+    return chunks or [text]

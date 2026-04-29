@@ -277,6 +277,55 @@ def test_retry_can_generate_after_transcription(monkeypatch, tmp_path):
     assert "Generated:" in result.output
 
 
+def test_process_generate_uses_configured_chunk_size(monkeypatch, tmp_path):
+    config_file = tmp_path / "config.yaml"
+    config_file.write_text(
+        """
+generation:
+  chunk_max_chars: 42
+""".strip(),
+        encoding="utf-8",
+    )
+    calls = []
+
+    monkeypatch.setattr(
+        "video2post.cli.fetch_initial_video_metadata",
+        lambda url: None,
+    )
+    monkeypatch.setattr(
+        "video2post.cli.prepare_audio",
+        lambda metadata_path, config: metadata_path.parent / "audio.wav",
+    )
+    monkeypatch.setattr(
+        "video2post.cli.transcribe_audio",
+        lambda metadata_path, config: metadata_path.parent / "transcript.en.md",
+    )
+
+    def fake_generate(metadata_path, config, targets=None):
+        calls.append((config.generation.chunk_max_chars, tuple(targets or [])))
+        return [metadata_path.parent / "notes.md"]
+
+    monkeypatch.setattr("video2post.cli.generate_outputs", fake_generate)
+
+    result = runner.invoke(
+        app,
+        [
+            "process",
+            "https://www.youtube.com/watch?v=abc",
+            "--config",
+            str(config_file),
+            "--output",
+            str(tmp_path / "outputs"),
+            "--generate",
+            "--targets",
+            "notes",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert calls == [(42, ("notes",))]
+
+
 def _write_task_metadata(tmp_path, *, status: TaskStatus) -> Path:
     metadata = TaskMetadata(
         source_url="https://www.youtube.com/watch?v=abc",

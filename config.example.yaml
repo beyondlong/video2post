@@ -34,4 +34,5 @@ generation:
     - article
     - script
     - titles
+  # Transcripts longer than this value are summarized chunk by chunk before final generation.
   chunk_max_chars: 6000

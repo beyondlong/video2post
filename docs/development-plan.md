@@ -233,6 +233,8 @@ titles.md
 
 目标：让 30-90 分钟技术视频也能稳定处理。
 
+当前状态：已开始实现基础分块链路。超过 `generation.chunk_max_chars` 的转写稿会输出 `chunks/` 和 `summaries/`，最终生成阶段会使用 chunk 摘要代替完整转写稿。
+
 主要任务：
 
 - 按 ASR segment 累积文本切块。
@@ -353,4 +355,3 @@ titles.md
 - Web 工作台。
 - 桌面应用。
 - 素材库和检索。
-

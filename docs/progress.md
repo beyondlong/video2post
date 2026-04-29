@@ -4,7 +4,7 @@
 >
 > 当前开发分支：`codex/phase-0-cli-skeleton`
 >
-> 最新进度提交：`055a1d6 feat: add retry and generate commands`
+> 最新进度提交以 `git log` 为准。
 
 本文档用于记录项目当前已经完成的能力、可测试效果和后续建议。`docs/development-plan.md` 继续作为开发计划使用，本文档记录真实落地进度。
 
@@ -18,7 +18,7 @@
 - 可以接入 `faster-whisper` 生成英文转写稿。
 - 可以通过 OpenAI-compatible LLM Provider 生成中文二创内容。
 - 可以对已有任务做局部生成和断点续跑。
-- 当前自动化测试通过：`38 passed`。
+- 当前自动化测试通过：`41 passed`。
 
 目前项目还处于个人自用 MVP 阶段，优先目标仍然是先把 YouTube 英文技术视频到中文二创内容的流程跑稳。
 
@@ -389,7 +389,7 @@ video2post retry TASK_DIR --generate --targets titles
 
 ```bash
 python3 -m pytest -q
-# 38 passed
+# 41 passed
 ```
 
 当前测试覆盖方向：
@@ -421,11 +421,18 @@ python3 -m pytest -q
 - 自动发布到公众号、微博、小红书、B 站等平台。
 - 素材库和检索。
 
-当前一个明显风险是：长视频在 LLM 阶段可能因为上下文过长而失败。因此下一步更适合先做长视频分块处理，而不是急着扩展更多平台。
+阶段 7 已开始实现。当前已经具备基础长视频分块能力：当转写稿长度超过 `generation.chunk_max_chars` 时，系统会先输出 `chunks/` 和 `summaries/` 中间文件，再使用合并后的 chunk 摘要生成最终二创内容。
+
+当前仍需继续完善：
+
+- 基于 ASR segment 的更精细切块。
+- chunk 摘要复用，避免重复调用 LLM。
+- 针对超长视频的全局摘要和多级汇总。
+- 更完整的真实长视频测试。
 
 ## 下一步建议
 
-优先进入阶段 7：长视频分块处理。
+继续推进阶段 7：长视频分块处理。
 
 建议顺序：
 
