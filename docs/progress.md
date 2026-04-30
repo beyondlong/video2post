@@ -185,6 +185,22 @@ language
 - 后续可以把它做成“更快出稿”的模式，优先面向二创场景。
 - 预期能力包括：更轻量的 ASR 模型、段落化英文稿、减少非必要产物、优先生成中文整理稿和笔记。
 
+### 5.1 B 站中文转写基础支持
+
+当前已经打通一版基础能力：
+
+- B 站链接可以被识别为 `bilibili` 平台。
+- B 站视频沿用现有下载和音频标准化链路。
+- 转写阶段会按平台自动输出中文稿 `transcript.zh.md`。
+- 同时保留 `transcript.segments.json` 原始 segment 数据。
+- 后续 `notes/article/script/titles` 生成阶段可以直接使用中文稿作为输入。
+
+当前边界：
+
+- 这是一版“最小可用”实现，先复用现有 ASR 链路。
+- `FunASR` Provider 还没有单独接入。
+- 还没有完成真实 B 站链接的端到端验收。
+
 ### 6. LLM Provider 与 Prompt 模板
 
 已实现 OpenAI-compatible LLM Provider。
@@ -435,6 +451,7 @@ python3 -m pytest -q
 - 针对超长视频的全局摘要和多级汇总。
 - 更完整的真实长视频测试。
 - `--fast` 模式和更激进的“快速出稿”链路优化。
+- B 站真实样例验收和 `FunASR` 独立接入。
 
 ## 下一步建议
 

@@ -106,3 +106,26 @@ def test_transcribe_audio_groups_segments_into_paragraphs(tmp_path):
     assert "First sentence. Second sentence." in transcript_text
     assert "New paragraph." in transcript_text
     assert "\n\nFirst sentence. Second sentence.\n\nNew paragraph.\n" in transcript_text
+
+
+def test_transcribe_audio_writes_chinese_transcript_for_bilibili(tmp_path):
+    audio = tmp_path / "audio.wav"
+    audio.write_text("audio", encoding="utf-8")
+    metadata = TaskMetadata(
+        source_url="https://www.bilibili.com/video/BV123",
+        platform="bilibili",
+        task_dir=tmp_path,
+        video=VideoMetadata(title="Bilibili Video"),
+    )
+    write_metadata(metadata)
+    transcriber = FakeTranscriber()
+
+    transcript_path = transcribe_audio(
+        tmp_path / "meta.json",
+        AppConfig(),
+        transcriber=transcriber,
+    )
+
+    assert transcript_path == tmp_path / "transcript.zh.md"
+    assert "## Paragraphs" in transcript_path.read_text(encoding="utf-8")
+    assert transcriber.calls == [(audio, "zh")]

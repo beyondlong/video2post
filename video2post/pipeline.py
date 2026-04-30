@@ -93,7 +93,7 @@ def transcribe_audio(
     transcriber: FasterWhisperTranscriber | None = None,
 ) -> Path:
     metadata = read_metadata(metadata_path)
-    transcript_path = metadata.task_dir / "transcript.en.md"
+    transcript_path, transcript_language, transcript_heading = _transcript_target(metadata)
     segments_path = metadata.task_dir / "transcript.segments.json"
     audio_path = metadata.task_dir / "audio.wav"
 
@@ -106,14 +106,14 @@ def transcribe_audio(
     )
 
     try:
-        segments = active_transcriber.transcribe(audio_path, language="en")
+        segments = active_transcriber.transcribe(audio_path, language=transcript_language)
         write_transcript(
             transcript_path,
             title=metadata.video.title or "untitled",
             platform=metadata.platform,
             source_url=metadata.source_url,
             segments=segments,
-            heading="Transcript EN",
+            heading=transcript_heading,
         )
         write_transcript_segments(segments_path, segments)
         metadata.asr_model = active_transcriber.model_name
@@ -152,7 +152,7 @@ def generate_outputs(
     active_provider = provider or OpenAICompatibleProvider(settings=config.llm)
     renderer = PromptRenderer(prompt_dir)
     selected_targets = targets or config.generation.default_targets
-    transcript = (metadata.task_dir / "transcript.en.md").read_text(encoding="utf-8")
+    transcript = _source_transcript_path(metadata.task_dir).read_text(encoding="utf-8")
     generated_paths: list[Path] = []
 
     try:
@@ -264,3 +264,16 @@ def _split_text_into_chunks(text: str, max_chars: int) -> list[str]:
         chunks.append("\n\n".join(current_parts))
 
     return chunks or [text]
+
+
+def _transcript_target(metadata: TaskMetadata) -> tuple[Path, str, str]:
+    if metadata.platform == "bilibili":
+        return metadata.task_dir / "transcript.zh.md", "zh", "Transcript ZH"
+    return metadata.task_dir / "transcript.en.md", "en", "Transcript EN"
+
+
+def _source_transcript_path(task_dir: Path) -> Path:
+    english = task_dir / "transcript.en.md"
+    if english.exists():
+        return english
+    return task_dir / "transcript.zh.md"

@@ -326,6 +326,49 @@ generation:
     assert calls == [(42, ("notes",))]
 
 
+def test_process_bilibili_pipeline_can_generate_from_chinese_transcript(monkeypatch, tmp_path):
+    calls = []
+
+    monkeypatch.setattr(
+        "video2post.cli.fetch_initial_video_metadata",
+        lambda url: VideoMetadata(title="Bilibili Video"),
+    )
+    monkeypatch.setattr(
+        "video2post.cli.prepare_audio",
+        lambda metadata_path, config: metadata_path.parent / "audio.wav",
+    )
+
+    def fake_transcribe(metadata_path, config):
+        calls.append(("transcribe", metadata_path.name))
+        transcript = metadata_path.parent / "transcript.zh.md"
+        transcript.write_text("中文整理稿", encoding="utf-8")
+        return transcript
+
+    def fake_generate(metadata_path, config, targets=None):
+        calls.append(("generate", tuple(targets or [])))
+        return [metadata_path.parent / "notes.md"]
+
+    monkeypatch.setattr("video2post.cli.transcribe_audio", fake_transcribe)
+    monkeypatch.setattr("video2post.cli.generate_outputs", fake_generate)
+
+    result = runner.invoke(
+        app,
+        [
+            "process",
+            "https://www.bilibili.com/video/BV123",
+            "--output",
+            str(tmp_path),
+            "--generate",
+            "--targets",
+            "notes",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert calls == [("transcribe", "meta.json"), ("generate", ("notes",))]
+    assert "Platform: bilibili" in result.output
+
+
 def test_tasks_command_lists_recent_tasks_from_output_directory(tmp_path):
     older_task = tmp_path / "2026-04-28-older-task"
     newer_task = tmp_path / "2026-04-29-newer-task"

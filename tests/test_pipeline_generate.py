@@ -192,6 +192,35 @@ def test_generate_outputs_reuses_existing_chunk_summaries(tmp_path):
     assert "Existing summary two" in provider.prompts[0]
 
 
+def test_generate_outputs_can_use_chinese_transcript_as_source(tmp_path):
+    metadata = TaskMetadata(
+        source_url="https://www.bilibili.com/video/BV123",
+        platform="bilibili",
+        task_dir=tmp_path,
+        video=VideoMetadata(title="Bilibili Video"),
+    )
+    write_metadata(metadata)
+    (tmp_path / "transcript.zh.md").write_text("中文整理稿", encoding="utf-8")
+    prompt_dir = tmp_path / "prompts"
+    prompt_dir.mkdir()
+    (prompt_dir / "notes.md").write_text(
+        "notes for {{ video_title }}\n{{ transcript }}",
+        encoding="utf-8",
+    )
+    provider = FakeProvider()
+
+    outputs = generate_outputs(
+        tmp_path / "meta.json",
+        AppConfig(),
+        provider=provider,
+        prompt_dir=prompt_dir,
+        targets=["notes"],
+    )
+
+    assert outputs == [tmp_path / "notes.md"]
+    assert "中文整理稿" in provider.prompts[0]
+
+
 def test_generate_outputs_records_failure_when_chunk_summary_fails(tmp_path):
     metadata = TaskMetadata(
         source_url="https://youtu.be/test",
