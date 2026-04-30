@@ -4,6 +4,55 @@
 
 项目当前处于早期规划和 MVP 阶段，第一版会优先做成本地 CLI 工具，用最短路径跑通“视频链接 -> 音频 -> 转写 -> 中文整理 -> 二创文案”的完整流程。
 
+当前已完成进度和可测试效果见：[docs/progress.md](docs/progress.md)。固定回归样例见：[docs/samples.md](docs/samples.md)。手工回归检查表见：[docs/manual-checklist.md](docs/manual-checklist.md)。真实验收产物对照见：[docs/test-fixtures.md](docs/test-fixtures.md)。
+
+当前安装与运行说明见：[docs/setup.md](docs/setup.md)。
+
+## 快速开始
+
+如果你只是想尽快在 macOS 上跑通一个样例，按下面 5 步来：
+
+1. 安装系统依赖
+
+```bash
+brew install ffmpeg yt-dlp
+```
+
+2. 安装项目依赖
+
+```bash
+python3 -m pip install -e .[dev]
+python3 -m pip install -e .[asr]
+```
+
+3. 配置 `.env`
+
+```bash
+VIDEO2POST_LLM_API_KEY=your-key
+VIDEO2POST_LLM_BASE_URL=https://api.minimaxi.com/v1
+VIDEO2POST_LLM_MODEL=MiniMax-M2.7
+```
+
+4. 确认 CLI 可用
+
+```bash
+python3 -m video2post.cli --help
+python3 -m video2post.cli samples
+python3 -m video2post.cli doctor
+```
+
+5. 跑一个最小样例
+
+```bash
+video2post process "https://www.youtube.com/watch?v=474wZZHoWN4" --output ./outputs-check --generate --targets notes,titles --cleanup-source
+```
+
+如果你当前 shell 里的 `video2post` 还没指向这个仓库，可以改用：
+
+```bash
+python3 -m video2post.cli process "https://www.youtube.com/watch?v=474wZZHoWN4" --output ./outputs-check --generate --targets notes,titles --cleanup-source
+```
+
 ## 核心目标
 
 - 支持 YouTube 和 B 站视频链接。
@@ -24,19 +73,35 @@ video2post
 示例用法：
 
 ```bash
-video2post "https://www.youtube.com/watch?v=xxxx"
-video2post "https://www.bilibili.com/video/BVxxxx"
+video2post process "https://www.youtube.com/watch?v=xxxx"
+video2post process "https://www.bilibili.com/video/BVxxxx"
+```
+
+如果当前 shell 里的 `video2post` 命令还没有正确绑定到这个仓库，也可以先用：
+
+```bash
+python3 -m video2post.cli --help
+python3 -m video2post.cli samples
 ```
 
 可选参数方向：
 
 ```bash
-video2post URL --platform youtube
-video2post URL --platform bilibili
-video2post URL --lang en
-video2post URL --lang zh
-video2post URL --targets article,script,titles
-video2post URL --output ./outputs
+video2post process URL --output ./outputs
+video2post process URL --generate --targets article,script,titles
+video2post process URL --cleanup-source
+video2post process URL --no-transcribe
+video2post process URL --no-download
+```
+
+LLM 相关配置既可以放在 `.env`，也可以放在 `config.yaml`：
+
+```yaml
+llm:
+  base_url: https://api.minimaxi.com/v1
+  model: MiniMax-M2.7
+  request_timeout_seconds: 300
+  retry_attempts: 2
 ```
 
 ## 处理流程
@@ -117,11 +182,48 @@ outputs/
 第一版最小命令集：
 
 ```bash
-video2post URL
+video2post process URL
 video2post retry TASK_DIR
 video2post generate TASK_DIR --targets article,script,titles
+video2post doctor
+video2post samples
 video2post config show
 ```
+
+## 安装与运行
+
+macOS 下推荐先安装系统依赖：
+
+```bash
+brew install ffmpeg yt-dlp
+```
+
+然后在项目根目录安装 Python 依赖：
+
+```bash
+python3 -m pip install -e .[dev]
+python3 -m pip install -e .[asr]
+```
+
+如果只想先确认 CLI 能不能跑起来，可以直接执行：
+
+```bash
+python3 -m video2post.cli --help
+python3 -m video2post.cli samples
+```
+
+更完整的安装、配置和故障排查见：[docs/setup.md](docs/setup.md)。
+
+## 回归样例
+
+当前项目内置了一组固定手工回归样例，可以直接查看：
+
+```bash
+video2post samples
+```
+
+样例说明文档见：[docs/samples.md](docs/samples.md)。
+手工回归检查表见：[docs/manual-checklist.md](docs/manual-checklist.md)。
 
 后续预留方向：
 
@@ -225,3 +327,4 @@ segments:
 
 - [需求文档](docs/requirements.md)
 - [开发计划](docs/development-plan.md)
+- [安装与运行](docs/setup.md)
