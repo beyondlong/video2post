@@ -166,8 +166,8 @@ video2post process URL --keep-source
 当前能力：
 
 - 从 `audio.wav` 生成英文转写稿。
-- 输出 `transcript.en.md`。
-- 保留 segment 时间戳。
+- 输出段落版 `transcript.en.md`。
+- 额外输出 `transcript.segments.json`，保留原始 `start/end/text/language`。
 - 支持跳过已存在转写文件。
 
 当前统一 segment 结构：
@@ -178,6 +178,12 @@ end
 text
 language
 ```
+
+后续优化记录：
+
+- 已讨论 `--fast` 模式，但当前决定暂缓实现。
+- 后续可以把它做成“更快出稿”的模式，优先面向二创场景。
+- 预期能力包括：更轻量的 ASR 模型、段落化英文稿、减少非必要产物、优先生成中文整理稿和笔记。
 
 ### 6. LLM Provider 与 Prompt 模板
 
@@ -428,6 +434,7 @@ python3 -m pytest -q
 - 基于 ASR segment 的更精细切块。
 - 针对超长视频的全局摘要和多级汇总。
 - 更完整的真实长视频测试。
+- `--fast` 模式和更激进的“快速出稿”链路优化。
 
 ## 下一步建议
 
