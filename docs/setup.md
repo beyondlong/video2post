@@ -118,10 +118,22 @@ python3 -m video2post.cli config show
 video2post process "https://www.youtube.com/watch?v=474wZZHoWN4" --output ./outputs-check --generate --targets notes,titles --cleanup-source
 ```
 
+如果当前 shell 里的 `video2post` 没有绑定到当前仓库，可改用：
+
+```bash
+python3 -m video2post.cli process "https://www.youtube.com/watch?v=474wZZHoWN4" --output ./outputs-check --generate --targets notes,titles --cleanup-source
+```
+
 ### 跑一条 B 站样例
 
 ```bash
 video2post process "https://www.bilibili.com/video/BV1fA9mBPEZt?t=7.0" --output ./outputs-check --generate --targets notes,titles --cleanup-source
+```
+
+同样，如果命令入口还没绑定成功，也可以用：
+
+```bash
+python3 -m video2post.cli process "https://www.bilibili.com/video/BV1fA9mBPEZt?t=7.0" --output ./outputs-check --generate --targets notes,titles --cleanup-source
 ```
 
 更多回归方式见：
@@ -167,3 +179,23 @@ llm:
 ### 3. B 站任务目录是 `untitled`
 
 旧任务目录可能仍然保留历史命名。当前版本已经支持保留中文标题 slug，新任务目录应更接近真实视频标题。
+
+### 4. `yt-dlp` 或 `ffmpeg` 命令找不到
+
+说明系统依赖还没装好，或者当前 shell 没拿到 PATH。
+
+处理方式：
+
+```bash
+brew install ffmpeg yt-dlp
+ffmpeg -version
+yt-dlp --version
+```
+
+如果是新开的 shell 仍然找不到，先重开一个终端窗口再试。
+
+### 5. `FunASR` 很慢或者第一次下载很大
+
+这是当前已知现象。`FunASR` 在 macOS 上首次冷启动会拉较大的模型文件，当前更适合作为实验性 provider，而不是默认中文 ASR。
+
+如果你只是想先稳定跑通 MVP，建议优先沿用当前默认链路，不要把 `FunASR` 设为首选。

@@ -8,6 +8,50 @@
 
 当前安装与运行说明见：[docs/setup.md](docs/setup.md)。
 
+## 快速开始
+
+如果你只是想尽快在 macOS 上跑通一个样例，按下面 5 步来：
+
+1. 安装系统依赖
+
+```bash
+brew install ffmpeg yt-dlp
+```
+
+2. 安装项目依赖
+
+```bash
+python3 -m pip install -e .[dev]
+python3 -m pip install -e .[asr]
+```
+
+3. 配置 `.env`
+
+```bash
+VIDEO2POST_LLM_API_KEY=your-key
+VIDEO2POST_LLM_BASE_URL=https://api.minimaxi.com/v1
+VIDEO2POST_LLM_MODEL=MiniMax-M2.7
+```
+
+4. 确认 CLI 可用
+
+```bash
+python3 -m video2post.cli --help
+python3 -m video2post.cli samples
+```
+
+5. 跑一个最小样例
+
+```bash
+video2post process "https://www.youtube.com/watch?v=474wZZHoWN4" --output ./outputs-check --generate --targets notes,titles --cleanup-source
+```
+
+如果你当前 shell 里的 `video2post` 还没指向这个仓库，可以改用：
+
+```bash
+python3 -m video2post.cli process "https://www.youtube.com/watch?v=474wZZHoWN4" --output ./outputs-check --generate --targets notes,titles --cleanup-source
+```
+
 ## 核心目标
 
 - 支持 YouTube 和 B 站视频链接。
