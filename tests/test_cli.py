@@ -34,6 +34,46 @@ def test_samples_command_lists_builtin_regression_cases():
     assert "invalid-url" in result.output
 
 
+def test_doctor_command_reports_results(monkeypatch):
+    from video2post.doctor import DoctorCheck, DoctorStatus
+
+    monkeypatch.setattr(
+        "video2post.cli.collect_doctor_checks",
+        lambda: [
+            DoctorCheck(name="ffmpeg", status=DoctorStatus.OK, detail="/opt/homebrew/bin/ffmpeg"),
+            DoctorCheck(
+                name="python:funasr",
+                status=DoctorStatus.OPTIONAL,
+                detail="funasr not installed",
+                required=False,
+            ),
+        ],
+    )
+
+    result = runner.invoke(app, ["doctor"])
+
+    assert result.exit_code == 0
+    assert "[OK] ffmpeg" in result.output
+    assert "[OPTIONAL] python:funasr" in result.output
+    assert "Doctor summary: required dependencies look ready." in result.output
+
+
+def test_doctor_command_returns_non_zero_when_required_items_are_missing(monkeypatch):
+    from video2post.doctor import DoctorCheck, DoctorStatus
+
+    monkeypatch.setattr(
+        "video2post.cli.collect_doctor_checks",
+        lambda: [
+            DoctorCheck(name="ffmpeg", status=DoctorStatus.MISSING, detail="command not found"),
+        ],
+    )
+
+    result = runner.invoke(app, ["doctor"])
+
+    assert result.exit_code == 1
+    assert "[MISSING] ffmpeg" in result.output
+
+
 def test_process_uses_configured_output_directory(tmp_path):
     config_file = tmp_path / "config.yaml"
     configured_output = tmp_path / "configured-output"

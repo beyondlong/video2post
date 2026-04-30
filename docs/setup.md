@@ -109,6 +109,7 @@ python3 -m video2post.cli samples
 ```bash
 python3 -m video2post.cli --help
 python3 -m video2post.cli samples
+python3 -m video2post.cli doctor
 python3 -m video2post.cli config show
 ```
 
@@ -159,7 +160,28 @@ python3 -m pip install -e .[dev]
 python3 -m video2post.cli --help
 ```
 
-### 2. 生成 `article.md` / `script.md` 时超时
+### 2. `doctor` 提示缺少依赖
+
+先运行：
+
+```bash
+python3 -m video2post.cli doctor
+```
+
+如果缺的是系统命令，优先补：
+
+```bash
+brew install ffmpeg yt-dlp
+```
+
+如果缺的是 Python 包，重新执行：
+
+```bash
+python3 -m pip install -e .[dev]
+python3 -m pip install -e .[asr]
+```
+
+### 3. 生成 `article.md` / `script.md` 时超时
 
 当前项目已经支持 LLM 请求超时和瞬时断线重试。默认值：
 
@@ -176,11 +198,11 @@ llm:
   retry_attempts: 3
 ```
 
-### 3. B 站任务目录是 `untitled`
+### 4. B 站任务目录是 `untitled`
 
 旧任务目录可能仍然保留历史命名。当前版本已经支持保留中文标题 slug，新任务目录应更接近真实视频标题。
 
-### 4. `yt-dlp` 或 `ffmpeg` 命令找不到
+### 5. `yt-dlp` 或 `ffmpeg` 命令找不到
 
 说明系统依赖还没装好，或者当前 shell 没拿到 PATH。
 
@@ -194,7 +216,7 @@ yt-dlp --version
 
 如果是新开的 shell 仍然找不到，先重开一个终端窗口再试。
 
-### 5. `FunASR` 很慢或者第一次下载很大
+### 6. `FunASR` 很慢或者第一次下载很大
 
 这是当前已知现象。`FunASR` 在 macOS 上首次冷启动会拉较大的模型文件，当前更适合作为实验性 provider，而不是默认中文 ASR。
 

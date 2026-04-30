@@ -38,6 +38,7 @@ VIDEO2POST_LLM_MODEL=MiniMax-M2.7
 ```bash
 python3 -m video2post.cli --help
 python3 -m video2post.cli samples
+python3 -m video2post.cli doctor
 ```
 
 5. 跑一个最小样例
@@ -184,6 +185,7 @@ outputs/
 video2post process URL
 video2post retry TASK_DIR
 video2post generate TASK_DIR --targets article,script,titles
+video2post doctor
 video2post samples
 video2post config show
 ```

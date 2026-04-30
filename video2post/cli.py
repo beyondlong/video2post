@@ -6,6 +6,7 @@ from typing import Annotated
 import typer
 
 from video2post.config import config_to_dict, load_config
+from video2post.doctor import DoctorStatus, collect_doctor_checks
 from video2post.downloader.ytdlp import detect_platform
 from video2post.downloader.ytdlp import YtDlpDownloader
 from video2post.models import TaskMetadata, VideoMetadata
@@ -229,6 +230,30 @@ def list_samples() -> None:
     """List the built-in manual regression samples."""
     for line in iter_sample_lines():
         typer.echo(line)
+
+
+@app.command("doctor")
+def doctor() -> None:
+    """Check whether the local runtime dependencies are ready."""
+    checks = collect_doctor_checks()
+    has_required_missing = False
+
+    for check in checks:
+        if check.status == DoctorStatus.OK:
+            label = "OK"
+        elif check.status == DoctorStatus.OPTIONAL:
+            label = "OPTIONAL"
+        else:
+            label = "MISSING"
+            if check.required:
+                has_required_missing = True
+        typer.echo(f"[{label}] {check.name} - {check.detail}")
+
+    if has_required_missing:
+        typer.echo("Doctor summary: required dependencies are missing.")
+        raise typer.Exit(code=1)
+
+    typer.echo("Doctor summary: required dependencies look ready.")
 
 
 @config_app.command("show")

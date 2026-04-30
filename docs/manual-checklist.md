@@ -11,6 +11,7 @@
 ```bash
 video2post --help
 video2post samples
+video2post doctor
 video2post config show
 ```
 
