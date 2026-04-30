@@ -41,7 +41,7 @@ class YtDlpDownloader:
         return VideoMetadata(
             title=raw.get("title"),
             author=raw.get("uploader") or raw.get("channel"),
-            duration_seconds=raw.get("duration"),
+            duration_seconds=_normalize_duration_seconds(raw.get("duration")),
             published_at=raw.get("upload_date") or raw.get("release_date"),
         )
 
@@ -82,3 +82,13 @@ def _resolve_downloaded_audio(output_template: Path, preferred_format: str) -> P
         return output_template
     matches = sorted(output_template.parent.glob(output_template.name.replace("%(ext)s", "*")))
     return matches[0] if matches else output_template
+
+
+def _normalize_duration_seconds(value: object) -> int | None:
+    if value is None:
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        return round(value)
+    return int(value)

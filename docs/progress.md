@@ -198,8 +198,8 @@ language
 当前边界：
 
 - 这是一版“最小可用”实现，先复用现有 ASR 链路。
-- `FunASR` Provider 还没有单独接入。
-- 还没有完成真实 B 站链接的端到端验收。
+- `FunASR` Provider 已接入代码路径，但当前环境还没有完成真实 FunASR 端到端验收。
+- 已完成一条真实 B 站链接的端到端验收，验证通过下载、音频标准化、中文转写、`notes.md` 和 `titles.md` 生成链路。
 
 ### 6. LLM Provider 与 Prompt 模板
 

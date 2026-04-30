@@ -54,6 +54,29 @@ def test_fetch_metadata_maps_ytdlp_json():
     assert kwargs["text"] is True
 
 
+def test_fetch_metadata_normalizes_float_duration_seconds():
+    def runner(command, **kwargs):
+        return subprocess.CompletedProcess(
+            command,
+            0,
+            stdout=json.dumps(
+                {
+                    "title": "Bilibili Video",
+                    "uploader": "Uploader",
+                    "duration": 816.808,
+                    "upload_date": "20260430",
+                }
+            ),
+            stderr="",
+        )
+
+    downloader = YtDlpDownloader(runner=runner)
+
+    metadata = downloader.fetch_metadata("https://www.bilibili.com/video/BV123")
+
+    assert metadata.duration_seconds == 817
+
+
 def test_download_audio_builds_expected_command(tmp_path):
     runner = FakeRunner()
     downloader = YtDlpDownloader(runner=runner)

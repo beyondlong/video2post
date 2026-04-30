@@ -129,3 +129,35 @@ def test_transcribe_audio_writes_chinese_transcript_for_bilibili(tmp_path):
     assert transcript_path == tmp_path / "transcript.zh.md"
     assert "## Paragraphs" in transcript_path.read_text(encoding="utf-8")
     assert transcriber.calls == [(audio, "zh")]
+
+
+def test_transcribe_audio_uses_funasr_for_bilibili_when_configured(monkeypatch, tmp_path):
+    audio = tmp_path / "audio.wav"
+    audio.write_text("audio", encoding="utf-8")
+    metadata = TaskMetadata(
+        source_url="https://www.bilibili.com/video/BV123",
+        platform="bilibili",
+        task_dir=tmp_path,
+        video=VideoMetadata(title="Bilibili Video"),
+    )
+    write_metadata(metadata)
+
+    class FakeChineseTranscriber:
+        model_name = "fake-funasr"
+
+        def __init__(self, *, model_name):
+            self.model_name = model_name
+
+        def transcribe(self, audio_path, *, language=None):
+            return [
+                TranscriptSegment(start=0, end=1, text="中文内容", language=language or "zh"),
+            ]
+
+    monkeypatch.setattr("video2post.pipeline.FunASRTranscriber", FakeChineseTranscriber)
+    config = AppConfig.model_validate({"asr": {"chinese_provider": "funasr", "funasr_model": "paraformer-zh"}})
+
+    transcript_path = transcribe_audio(tmp_path / "meta.json", config)
+    loaded = read_metadata(tmp_path / "meta.json")
+
+    assert transcript_path == tmp_path / "transcript.zh.md"
+    assert loaded.asr_model == "paraformer-zh"

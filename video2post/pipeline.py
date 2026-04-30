@@ -3,6 +3,7 @@ from pathlib import Path
 
 from video2post.audio.ffmpeg import FfmpegAudioNormalizer
 from video2post.asr.faster_whisper import FasterWhisperTranscriber
+from video2post.asr.funasr import FunASRTranscriber
 from video2post.config import AppConfig
 from video2post.downloader.ytdlp import YtDlpDownloader
 from video2post.llm.openai_compatible import OpenAICompatibleProvider
@@ -90,7 +91,7 @@ def transcribe_audio(
     metadata_path: Path | str,
     config: AppConfig,
     *,
-    transcriber: FasterWhisperTranscriber | None = None,
+    transcriber: object | None = None,
 ) -> Path:
     metadata = read_metadata(metadata_path)
     transcript_path, transcript_language, transcript_heading = _transcript_target(metadata)
@@ -101,9 +102,7 @@ def transcribe_audio(
         update_status(metadata_path, TaskStatus.TRANSCRIBED)
         return transcript_path
 
-    active_transcriber = transcriber or FasterWhisperTranscriber(
-        model_name=config.asr.faster_whisper_model
-    )
+    active_transcriber = transcriber or _build_transcriber(metadata, config)
 
     try:
         segments = active_transcriber.transcribe(audio_path, language=transcript_language)
@@ -277,3 +276,9 @@ def _source_transcript_path(task_dir: Path) -> Path:
     if english.exists():
         return english
     return task_dir / "transcript.zh.md"
+
+
+def _build_transcriber(metadata: TaskMetadata, config: AppConfig) -> object:
+    if metadata.platform == "bilibili" and config.asr.chinese_provider == "funasr":
+        return FunASRTranscriber(model_name=config.asr.funasr_model)
+    return FasterWhisperTranscriber(model_name=config.asr.faster_whisper_model)
