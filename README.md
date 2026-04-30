@@ -6,6 +6,8 @@
 
 当前已完成进度和可测试效果见：[docs/progress.md](docs/progress.md)。固定回归样例见：[docs/samples.md](docs/samples.md)。手工回归检查表见：[docs/manual-checklist.md](docs/manual-checklist.md)。真实验收产物对照见：[docs/test-fixtures.md](docs/test-fixtures.md)。
 
+当前安装与运行说明见：[docs/setup.md](docs/setup.md)。
+
 ## 核心目标
 
 - 支持 YouTube 和 B 站视频链接。
@@ -28,6 +30,13 @@ video2post
 ```bash
 video2post process "https://www.youtube.com/watch?v=xxxx"
 video2post process "https://www.bilibili.com/video/BVxxxx"
+```
+
+如果当前 shell 里的 `video2post` 命令还没有正确绑定到这个仓库，也可以先用：
+
+```bash
+python3 -m video2post.cli --help
+python3 -m video2post.cli samples
 ```
 
 可选参数方向：
@@ -134,6 +143,30 @@ video2post generate TASK_DIR --targets article,script,titles
 video2post samples
 video2post config show
 ```
+
+## 安装与运行
+
+macOS 下推荐先安装系统依赖：
+
+```bash
+brew install ffmpeg yt-dlp
+```
+
+然后在项目根目录安装 Python 依赖：
+
+```bash
+python3 -m pip install -e .[dev]
+python3 -m pip install -e .[asr]
+```
+
+如果只想先确认 CLI 能不能跑起来，可以直接执行：
+
+```bash
+python3 -m video2post.cli --help
+python3 -m video2post.cli samples
+```
+
+更完整的安装、配置和故障排查见：[docs/setup.md](docs/setup.md)。
 
 ## 回归样例
 
@@ -248,3 +281,4 @@ segments:
 
 - [需求文档](docs/requirements.md)
 - [开发计划](docs/development-plan.md)
+- [安装与运行](docs/setup.md)

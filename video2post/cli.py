@@ -299,3 +299,7 @@ def fetch_initial_video_metadata(url: str) -> VideoMetadata:
         return YtDlpDownloader().fetch_metadata(url)
     except subprocess.CalledProcessError:
         return VideoMetadata(title="untitled")
+
+
+if __name__ == "__main__":
+    app()
