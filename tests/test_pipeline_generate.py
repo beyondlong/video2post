@@ -59,7 +59,7 @@ def test_generate_outputs_writes_requested_files_and_updates_metadata(tmp_path):
         tmp_path / "transcript.zh.md"
     ).read_text(encoding="utf-8")
     loaded = read_metadata(tmp_path / "meta.json")
-    assert loaded.status == TaskStatus.TITLES_GENERATED
+    assert loaded.status == TaskStatus.COMPLETED
     assert loaded.llm_model == "fake-llm"
 
 
@@ -91,6 +91,120 @@ def test_generate_outputs_uses_default_targets(tmp_path):
         "script.md",
         "titles.md",
     ]
+
+
+def test_generate_outputs_marks_bilibili_default_run_as_completed(tmp_path):
+    metadata = TaskMetadata(
+        source_url="https://www.bilibili.com/video/BV123",
+        platform="bilibili",
+        task_dir=tmp_path,
+        video=VideoMetadata(title="Bilibili Video"),
+    )
+    write_metadata(metadata)
+    (tmp_path / "transcript.zh.md").write_text("中文整理稿", encoding="utf-8")
+    prompt_dir = tmp_path / "prompts"
+    prompt_dir.mkdir()
+    for name in ["notes", "article", "script", "titles"]:
+        (prompt_dir / f"{name}.md").write_text(name, encoding="utf-8")
+
+    outputs = generate_outputs(
+        tmp_path / "meta.json",
+        AppConfig(),
+        provider=FakeProvider(),
+        prompt_dir=prompt_dir,
+    )
+
+    loaded = read_metadata(tmp_path / "meta.json")
+    assert [path.name for path in outputs] == [
+        "notes.md",
+        "article.md",
+        "script.md",
+        "titles.md",
+    ]
+    assert loaded.status == TaskStatus.COMPLETED
+
+
+def test_generate_outputs_keeps_partial_status_for_partial_target_run(tmp_path):
+    metadata = TaskMetadata(
+        source_url="https://youtu.be/test",
+        platform="youtube",
+        task_dir=tmp_path,
+        video=VideoMetadata(title="Test Video"),
+    )
+    write_metadata(metadata)
+    (tmp_path / "transcript.en.md").write_text("English transcript", encoding="utf-8")
+    prompt_dir = tmp_path / "prompts"
+    prompt_dir.mkdir()
+    (prompt_dir / "titles.md").write_text("titles", encoding="utf-8")
+
+    generate_outputs(
+        tmp_path / "meta.json",
+        AppConfig(),
+        provider=FakeProvider(),
+        prompt_dir=prompt_dir,
+        targets=["titles"],
+    )
+
+    loaded = read_metadata(tmp_path / "meta.json")
+    assert loaded.status == TaskStatus.TITLES_GENERATED
+
+
+def test_generate_outputs_clears_previous_error_on_success(tmp_path):
+    metadata = TaskMetadata(
+        source_url="https://www.bilibili.com/video/BV123",
+        platform="bilibili",
+        task_dir=tmp_path,
+        video=VideoMetadata(title="Bilibili Video"),
+        status=TaskStatus.FAILED,
+        error={"stage": "llm_generation", "message": "old error", "retryable": True},
+    )
+    write_metadata(metadata)
+    (tmp_path / "transcript.zh.md").write_text("中文整理稿", encoding="utf-8")
+    prompt_dir = tmp_path / "prompts"
+    prompt_dir.mkdir()
+    (prompt_dir / "script.md").write_text("script", encoding="utf-8")
+
+    generate_outputs(
+        tmp_path / "meta.json",
+        AppConfig(),
+        provider=FakeProvider(),
+        prompt_dir=prompt_dir,
+        targets=["script"],
+    )
+
+    loaded = read_metadata(tmp_path / "meta.json")
+    assert loaded.status == TaskStatus.SCRIPT_GENERATED
+    assert loaded.error is None
+
+
+def test_generate_outputs_keeps_completed_when_all_expected_outputs_exist(tmp_path):
+    metadata = TaskMetadata(
+        source_url="https://www.bilibili.com/video/BV123",
+        platform="bilibili",
+        task_dir=tmp_path,
+        video=VideoMetadata(title="Bilibili Video"),
+        status=TaskStatus.COMPLETED,
+    )
+    write_metadata(metadata)
+    (tmp_path / "transcript.zh.md").write_text("中文整理稿", encoding="utf-8")
+    (tmp_path / "notes.md").write_text("notes", encoding="utf-8")
+    (tmp_path / "article.md").write_text("article", encoding="utf-8")
+    (tmp_path / "script.md").write_text("script", encoding="utf-8")
+    (tmp_path / "titles.md").write_text("titles", encoding="utf-8")
+    prompt_dir = tmp_path / "prompts"
+    prompt_dir.mkdir()
+    (prompt_dir / "article.md").write_text("article", encoding="utf-8")
+
+    generate_outputs(
+        tmp_path / "meta.json",
+        AppConfig(),
+        provider=FakeProvider(),
+        prompt_dir=prompt_dir,
+        targets=["article"],
+    )
+
+    loaded = read_metadata(tmp_path / "meta.json")
+    assert loaded.status == TaskStatus.COMPLETED
 
 
 def test_generate_outputs_summarizes_large_transcript_in_chunks(tmp_path):
@@ -219,6 +333,73 @@ def test_generate_outputs_can_use_chinese_transcript_as_source(tmp_path):
 
     assert outputs == [tmp_path / "notes.md"]
     assert "中文整理稿" in provider.prompts[0]
+
+
+def test_generate_outputs_skips_translation_by_default_for_bilibili(tmp_path):
+    metadata = TaskMetadata(
+        source_url="https://www.bilibili.com/video/BV123",
+        platform="bilibili",
+        task_dir=tmp_path,
+        video=VideoMetadata(title="Bilibili Video"),
+    )
+    write_metadata(metadata)
+    original_transcript = "原始中文转写"
+    transcript_path = tmp_path / "transcript.zh.md"
+    transcript_path.write_text(original_transcript, encoding="utf-8")
+    prompt_dir = tmp_path / "prompts"
+    prompt_dir.mkdir()
+    for name in ["translation", "notes", "article", "script", "titles"]:
+        (prompt_dir / f"{name}.md").write_text(
+            f"{name}: {{{{ video_title }}}}\n{{{{ transcript }}}}",
+            encoding="utf-8",
+        )
+    provider = FakeProvider()
+
+    outputs = generate_outputs(
+        tmp_path / "meta.json",
+        AppConfig(),
+        provider=provider,
+        prompt_dir=prompt_dir,
+    )
+
+    assert [path.name for path in outputs] == [
+        "notes.md",
+        "article.md",
+        "script.md",
+        "titles.md",
+    ]
+    assert transcript_path.read_text(encoding="utf-8") == original_transcript
+    assert len(provider.prompts) == 4
+    assert all(not prompt.startswith("translation:") for prompt in provider.prompts)
+
+
+def test_generate_outputs_can_still_run_explicit_translation_for_bilibili(tmp_path):
+    metadata = TaskMetadata(
+        source_url="https://www.bilibili.com/video/BV123",
+        platform="bilibili",
+        task_dir=tmp_path,
+        video=VideoMetadata(title="Bilibili Video"),
+    )
+    write_metadata(metadata)
+    (tmp_path / "transcript.zh.md").write_text("原始中文转写", encoding="utf-8")
+    prompt_dir = tmp_path / "prompts"
+    prompt_dir.mkdir()
+    (prompt_dir / "translation.md").write_text(
+        "translation: {{ video_title }}\n{{ transcript }}",
+        encoding="utf-8",
+    )
+    provider = FakeProvider()
+
+    outputs = generate_outputs(
+        tmp_path / "meta.json",
+        AppConfig(),
+        provider=provider,
+        prompt_dir=prompt_dir,
+        targets=["translation"],
+    )
+
+    assert outputs == [tmp_path / "transcript.zh.md"]
+    assert provider.prompts[0].startswith("translation: Bilibili Video")
 
 
 def test_generate_outputs_records_failure_when_chunk_summary_fails(tmp_path):

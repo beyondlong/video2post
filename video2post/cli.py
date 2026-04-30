@@ -8,12 +8,13 @@ import typer
 from video2post.config import config_to_dict, load_config
 from video2post.downloader.ytdlp import detect_platform
 from video2post.downloader.ytdlp import YtDlpDownloader
-from video2post.models import VideoMetadata
+from video2post.models import TaskMetadata, VideoMetadata
 from video2post.pipeline import (
     generate_outputs,
     prepare_audio,
     transcribe_audio,
 )
+from video2post.samples import iter_sample_lines
 from video2post.writers.metadata import read_metadata, write_metadata
 from video2post.writers.workspace import create_task_workspace
 
@@ -174,7 +175,7 @@ def retry(
     metadata_path = _metadata_path(task_dir)
     metadata = read_metadata(metadata_path)
     audio_path = metadata.task_dir / "audio.wav"
-    transcript_path = metadata.task_dir / "transcript.en.md"
+    transcript_path = _expected_transcript_path(metadata)
     did_work = False
 
     if not audio_path.exists():
@@ -223,6 +224,13 @@ def list_tasks(
         typer.echo(line)
 
 
+@app.command("samples")
+def list_samples() -> None:
+    """List the built-in manual regression samples."""
+    for line in iter_sample_lines():
+        typer.echo(line)
+
+
 @config_app.command("show")
 def show_config(
     config: Annotated[
@@ -239,6 +247,12 @@ def _parse_targets(raw_targets: str | None) -> list[str] | None:
     if not raw_targets:
         return None
     return [target.strip() for target in raw_targets.split(",") if target.strip()]
+
+
+def _expected_transcript_path(metadata: VideoMetadata | TaskMetadata) -> Path:
+    if metadata.platform == "bilibili":
+        return metadata.task_dir / "transcript.zh.md"
+    return metadata.task_dir / "transcript.en.md"
 
 
 def _collect_task_lines(output_dir: Path, *, limit: int) -> list[str]:

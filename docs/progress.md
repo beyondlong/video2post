@@ -1,12 +1,19 @@
 # video2post 当前进度记录
 
-> 更新时间：2026-04-29
+> 更新时间：2026-04-30
 >
 > 当前开发分支：`codex/phase-0-cli-skeleton`
 >
 > 最新进度提交以 `git log` 为准。
 
 本文档用于记录项目当前已经完成的能力、可测试效果和后续建议。`docs/development-plan.md` 继续作为开发计划使用，本文档记录真实落地进度。
+
+当前阶段 9 已开始补“固定样例与手工回归基线”：
+
+- 固定样例清单：`docs/samples.md`
+- 内置样例命令：`video2post samples`
+- 手工回归检查表：`docs/manual-checklist.md`
+- 真实验收产物对照：`docs/test-fixtures.md`
 
 ## 当前整体状态
 
@@ -18,7 +25,7 @@
 - 可以接入 `faster-whisper` 生成英文转写稿。
 - 可以通过 OpenAI-compatible LLM Provider 生成中文二创内容。
 - 可以对已有任务做局部生成和断点续跑。
-- 当前自动化测试通过：`41 passed`。
+- 当前自动化测试通过：以最新 `pytest` 结果为准。
 
 目前项目还处于个人自用 MVP 阶段，优先目标仍然是先把 YouTube 英文技术视频到中文二创内容的流程跑稳。
 
@@ -198,8 +205,25 @@ language
 当前边界：
 
 - 这是一版“最小可用”实现，先复用现有 ASR 链路。
-- `FunASR` Provider 已接入代码路径，但当前环境还没有完成真实 FunASR 端到端验收。
+- `FunASR` Provider 已接入代码路径，也完成了真实环境验收，但当前不建议直接切为默认中文 ASR。
 - 已完成一条真实 B 站链接的端到端验收，验证通过下载、音频标准化、中文转写、`notes.md` 和 `titles.md` 生成链路。
+- `retry` 命令现在会按平台识别转写稿文件，B 站任务会检查 `transcript.zh.md`，不再误判为缺少英文稿。
+
+### 5.2 FunASR 真实验收结论
+
+已新增独立记录文档：
+
+```text
+docs/funasr-validation.md
+```
+
+当前结论：
+
+- `FunASR` 运行环境已经在当前 macOS 机器上安装成功。
+- 真实运行中发现并修复了一个 adapter 问题：传入 `Path` 会触发运行时错误，现已改为传字符串路径。
+- `FunASR` 模型冷启动较重，真实测试中出现了约 `857MB` 到 `944MB` 级别的模型缓存/下载体量。
+- 对 17 分钟左右的 B 站音频，真实推理等待时间仍然偏长，不适合作为当前 MVP 的默认中文 ASR。
+- 因此，当前建议保留 `FunASR` 为实验性 Provider，后续再单独优化。
 
 ### 6. LLM Provider 与 Prompt 模板
 
@@ -212,6 +236,15 @@ VIDEO2POST_LLM_API_KEY=
 VIDEO2POST_LLM_BASE_URL=
 VIDEO2POST_LLM_MODEL=
 ```
+
+当前默认 LLM 稳定性配置：
+
+```text
+request_timeout_seconds=300
+retry_attempts=2
+```
+
+这样在生成 `article.md`、`script.md` 这类更长产物时，对偶发超时和瞬时连接中断更稳一些。
 
 已验证 Minimax 配置：
 

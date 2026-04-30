@@ -25,5 +25,7 @@ def create_task_workspace(
 
 
 def _slugify(value: str) -> str:
-    slug = re.sub(r"[^a-zA-Z0-9]+", "-", value.lower()).strip("-")
+    normalized = value.lower()
+    slug = re.sub(r"[^\w\u4e00-\u9fff]+", "-", normalized, flags=re.UNICODE).strip("-")
+    slug = re.sub(r"-{2,}", "-", slug)
     return slug or "untitled"

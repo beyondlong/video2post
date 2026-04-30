@@ -30,21 +30,31 @@ class OpenAICompatibleProvider:
             raise RuntimeError("Missing llm.base_url configuration.")
         if not model:
             raise RuntimeError("Missing llm.model configuration.")
+        attempts = max(self.settings.retry_attempts, 1)
+        last_error: httpx.HTTPError | None = None
 
-        response = self._http_client.post(
-            f"{base_url.rstrip('/')}/chat/completions",
-            headers={
-                "Authorization": f"Bearer {api_key}",
-                "Content-Type": "application/json",
-            },
-            json={
-                "model": model,
-                "messages": [{"role": "user", "content": prompt}],
-                "temperature": self.settings.temperature,
-                "max_tokens": self.settings.max_tokens,
-            },
-            timeout=120,
-        )
-        response.raise_for_status()
-        data = response.json()
-        return clean_llm_output(data["choices"][0]["message"]["content"])
+        for _ in range(attempts):
+            try:
+                response = self._http_client.post(
+                    f"{base_url.rstrip('/')}/chat/completions",
+                    headers={
+                        "Authorization": f"Bearer {api_key}",
+                        "Content-Type": "application/json",
+                    },
+                    json={
+                        "model": model,
+                        "messages": [{"role": "user", "content": prompt}],
+                        "temperature": self.settings.temperature,
+                        "max_tokens": self.settings.max_tokens,
+                    },
+                    timeout=self.settings.request_timeout_seconds,
+                )
+                response.raise_for_status()
+                data = response.json()
+                return clean_llm_output(data["choices"][0]["message"]["content"])
+            except (httpx.ReadTimeout, httpx.RemoteProtocolError) as error:
+                last_error = error
+
+        if last_error is not None:
+            raise last_error
+        raise RuntimeError("OpenAI-compatible provider failed without returning a response.")

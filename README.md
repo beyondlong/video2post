@@ -4,7 +4,7 @@
 
 项目当前处于早期规划和 MVP 阶段，第一版会优先做成本地 CLI 工具，用最短路径跑通“视频链接 -> 音频 -> 转写 -> 中文整理 -> 二创文案”的完整流程。
 
-当前已完成进度和可测试效果见：[docs/progress.md](docs/progress.md)。
+当前已完成进度和可测试效果见：[docs/progress.md](docs/progress.md)。固定回归样例见：[docs/samples.md](docs/samples.md)。手工回归检查表见：[docs/manual-checklist.md](docs/manual-checklist.md)。真实验收产物对照见：[docs/test-fixtures.md](docs/test-fixtures.md)。
 
 ## 核心目标
 
@@ -38,6 +38,16 @@ video2post process URL --generate --targets article,script,titles
 video2post process URL --cleanup-source
 video2post process URL --no-transcribe
 video2post process URL --no-download
+```
+
+LLM 相关配置既可以放在 `.env`，也可以放在 `config.yaml`：
+
+```yaml
+llm:
+  base_url: https://api.minimaxi.com/v1
+  model: MiniMax-M2.7
+  request_timeout_seconds: 300
+  retry_attempts: 2
 ```
 
 ## 处理流程
@@ -121,8 +131,20 @@ outputs/
 video2post process URL
 video2post retry TASK_DIR
 video2post generate TASK_DIR --targets article,script,titles
+video2post samples
 video2post config show
 ```
+
+## 回归样例
+
+当前项目内置了一组固定手工回归样例，可以直接查看：
+
+```bash
+video2post samples
+```
+
+样例说明文档见：[docs/samples.md](docs/samples.md)。
+手工回归检查表见：[docs/manual-checklist.md](docs/manual-checklist.md)。
 
 后续预留方向：
 

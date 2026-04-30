@@ -37,6 +37,8 @@ class LlmSettings(BaseModel):
     model: str | None = None
     temperature: float = 0.7
     max_tokens: int = 4096
+    request_timeout_seconds: int = 300
+    retry_attempts: int = 2
 
 
 class GenerationSettings(BaseModel):

@@ -21,7 +21,7 @@ class FunASRTranscriber:
         language: str | None = None,
     ) -> list[TranscriptSegment]:
         model = self._model or self._load_model()
-        results = model.generate(input=Path(audio_path), language=language or "zh")
+        results = model.generate(input=str(Path(audio_path)), language=language or "zh")
         return _map_results(results, language or "zh")
 
     def _load_model(self) -> Any:

@@ -25,6 +25,15 @@ def test_config_show_prints_effective_config():
     assert "openai_compatible" in result.output
 
 
+def test_samples_command_lists_builtin_regression_cases():
+    result = runner.invoke(app, ["samples"])
+
+    assert result.exit_code == 0
+    assert "youtube-short-tech" in result.output
+    assert "bilibili-short-cn" in result.output
+    assert "invalid-url" in result.output
+
+
 def test_process_uses_configured_output_directory(tmp_path):
     config_file = tmp_path / "config.yaml"
     configured_output = tmp_path / "configured-output"
@@ -277,6 +286,33 @@ def test_retry_can_generate_after_transcription(monkeypatch, tmp_path):
     assert "Generated:" in result.output
 
 
+def test_retry_bilibili_uses_chinese_transcript_as_completion_signal(monkeypatch, tmp_path):
+    metadata_path = _write_task_metadata(
+        tmp_path,
+        status=TaskStatus.TRANSCRIBED,
+        platform="bilibili",
+        source_url="https://www.bilibili.com/video/BV123",
+    )
+    (tmp_path / "audio.wav").write_bytes(b"audio")
+    (tmp_path / "transcript.zh.md").write_text("中文整理稿", encoding="utf-8")
+    calls = []
+
+    monkeypatch.setattr(
+        "video2post.cli.prepare_audio",
+        lambda metadata_path_arg, config: calls.append("audio"),
+    )
+    monkeypatch.setattr(
+        "video2post.cli.transcribe_audio",
+        lambda metadata_path_arg, config: calls.append("transcribe"),
+    )
+
+    result = runner.invoke(app, ["retry", str(tmp_path)])
+
+    assert result.exit_code == 0
+    assert calls == []
+    assert "Nothing to retry." in result.output
+
+
 def test_process_generate_uses_configured_chunk_size(monkeypatch, tmp_path):
     config_file = tmp_path / "config.yaml"
     config_file.write_text(
@@ -420,10 +456,16 @@ def test_tasks_command_respects_limit(tmp_path):
     assert len(lines) == 2
 
 
-def _write_task_metadata(tmp_path, *, status: TaskStatus) -> Path:
+def _write_task_metadata(
+    tmp_path,
+    *,
+    status: TaskStatus,
+    platform: str = "youtube",
+    source_url: str = "https://www.youtube.com/watch?v=abc",
+) -> Path:
     metadata = TaskMetadata(
-        source_url="https://www.youtube.com/watch?v=abc",
-        platform="youtube",
+        source_url=source_url,
+        platform=platform,
         task_dir=tmp_path,
         status=status,
         video=VideoMetadata(title="Test Video"),

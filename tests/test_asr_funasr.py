@@ -1,5 +1,3 @@
-from pathlib import Path
-
 from video2post.asr.funasr import FunASRTranscriber
 from video2post.models import TranscriptSegment
 
@@ -33,7 +31,7 @@ def test_funasr_transcriber_maps_segments(tmp_path):
     ]
     assert model.calls == [
         (
-            Path(audio),
+            str(audio),
             {
                 "language": "zh",
             },

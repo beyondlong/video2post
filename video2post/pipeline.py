@@ -150,7 +150,7 @@ def generate_outputs(
     metadata = read_metadata(metadata_path)
     active_provider = provider or OpenAICompatibleProvider(settings=config.llm)
     renderer = PromptRenderer(prompt_dir)
-    selected_targets = targets or config.generation.default_targets
+    selected_targets = _selected_generation_targets(metadata, config, targets)
     transcript = _source_transcript_path(metadata.task_dir).read_text(encoding="utf-8")
     generated_paths: list[Path] = []
 
@@ -180,8 +180,13 @@ def generate_outputs(
             write_markdown(output_path, content)
             metadata.status = status
             metadata.llm_model = active_provider.model_name
+            metadata.error = None
             write_metadata(metadata)
             generated_paths.append(output_path)
+        metadata = read_metadata(metadata_path)
+        metadata.status = _derived_generation_status(metadata, config)
+        metadata.error = None
+        write_metadata(metadata)
         return generated_paths
     except Exception as error:
         update_status(
@@ -276,6 +281,40 @@ def _source_transcript_path(task_dir: Path) -> Path:
     if english.exists():
         return english
     return task_dir / "transcript.zh.md"
+
+
+def _selected_generation_targets(
+    metadata: TaskMetadata,
+    config: AppConfig,
+    targets: list[str] | None,
+) -> list[str]:
+    if targets is not None:
+        return targets
+    if metadata.platform == "bilibili":
+        return [target for target in config.generation.default_targets if target != "translation"]
+    return config.generation.default_targets
+
+
+def _is_full_generation_run(
+    metadata: TaskMetadata,
+    config: AppConfig,
+    selected_targets: list[str],
+) -> bool:
+    expected_targets = _selected_generation_targets(metadata, config, None)
+    return selected_targets == expected_targets
+
+
+def _derived_generation_status(metadata: TaskMetadata, config: AppConfig) -> TaskStatus:
+    expected_targets = _selected_generation_targets(metadata, config, None)
+    expected_files = [TARGET_OUTPUTS[target][0] for target in expected_targets]
+    if all((metadata.task_dir / filename).exists() for filename in expected_files):
+        return TaskStatus.COMPLETED
+
+    for target in reversed(expected_targets):
+        filename, status = TARGET_OUTPUTS[target]
+        if (metadata.task_dir / filename).exists():
+            return status
+    return metadata.status
 
 
 def _build_transcriber(metadata: TaskMetadata, config: AppConfig) -> object:
