@@ -11,7 +11,7 @@ from video2post.models import TaskMetadata, TaskStatus
 from video2post.writers.markdown import write_markdown
 from video2post.writers.metadata import read_metadata, update_status
 from video2post.writers.metadata import write_metadata
-from video2post.writers.transcript import write_transcript
+from video2post.writers.transcript import write_transcript, write_transcript_segments
 
 
 def fetch_video_metadata(
@@ -94,6 +94,7 @@ def transcribe_audio(
 ) -> Path:
     metadata = read_metadata(metadata_path)
     transcript_path = metadata.task_dir / "transcript.en.md"
+    segments_path = metadata.task_dir / "transcript.segments.json"
     audio_path = metadata.task_dir / "audio.wav"
 
     if config.app.skip_existing and transcript_path.exists():
@@ -114,6 +115,7 @@ def transcribe_audio(
             segments=segments,
             heading="Transcript EN",
         )
+        write_transcript_segments(segments_path, segments)
         metadata.asr_model = active_transcriber.model_name
         metadata.status = TaskStatus.TRANSCRIBED
         write_metadata(metadata)

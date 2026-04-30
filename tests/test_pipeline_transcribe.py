@@ -38,7 +38,12 @@ def test_transcribe_audio_writes_english_transcript_and_updates_metadata(tmp_pat
     loaded = read_metadata(tmp_path / "meta.json")
     assert transcript_path == tmp_path / "transcript.en.md"
     assert transcript_path.exists()
-    assert "Hello." in transcript_path.read_text(encoding="utf-8")
+    transcript_text = transcript_path.read_text(encoding="utf-8")
+    assert "Hello." in transcript_text
+    assert "### [" not in transcript_text
+    segments_path = tmp_path / "transcript.segments.json"
+    assert segments_path.exists()
+    assert '"start": 0.0' in segments_path.read_text(encoding="utf-8")
     assert loaded.status == TaskStatus.TRANSCRIBED
     assert loaded.asr_model == "fake-whisper"
     assert transcriber.calls == [(audio, "en")]
@@ -67,3 +72,37 @@ def test_transcribe_audio_skips_existing_transcript(tmp_path):
     assert transcript_path == transcript
     assert transcriber.calls == []
     assert loaded.status == TaskStatus.TRANSCRIBED
+
+
+def test_transcribe_audio_groups_segments_into_paragraphs(tmp_path):
+    audio = tmp_path / "audio.wav"
+    audio.write_text("audio", encoding="utf-8")
+    metadata = TaskMetadata(
+        source_url="https://youtu.be/test",
+        platform="youtube",
+        task_dir=tmp_path,
+        video=VideoMetadata(title="Test Video"),
+    )
+    write_metadata(metadata)
+
+    class ParagraphTranscriber:
+        model_name = "fake-whisper"
+
+        def transcribe(self, audio_path, *, language=None):
+            return [
+                TranscriptSegment(start=0, end=1, text="First sentence.", language="en"),
+                TranscriptSegment(start=1, end=2, text="Second sentence.", language="en"),
+                TranscriptSegment(start=12, end=13, text="New paragraph.", language="en"),
+            ]
+
+    transcript_path = transcribe_audio(
+        tmp_path / "meta.json",
+        AppConfig(),
+        transcriber=ParagraphTranscriber(),
+    )
+
+    transcript_text = transcript_path.read_text(encoding="utf-8")
+    assert "## Paragraphs" in transcript_text
+    assert "First sentence. Second sentence." in transcript_text
+    assert "New paragraph." in transcript_text
+    assert "\n\nFirst sentence. Second sentence.\n\nNew paragraph.\n" in transcript_text
