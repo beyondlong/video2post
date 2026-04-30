@@ -326,6 +326,57 @@ generation:
     assert calls == [(42, ("notes",))]
 
 
+def test_tasks_command_lists_recent_tasks_from_output_directory(tmp_path):
+    older_task = tmp_path / "2026-04-28-older-task"
+    newer_task = tmp_path / "2026-04-29-newer-task"
+    _write_task_metadata(older_task, status=TaskStatus.TRANSCRIBED)
+    _write_task_metadata(newer_task, status=TaskStatus.TITLES_GENERATED)
+    (newer_task / "audio.wav").write_bytes(b"audio")
+    (newer_task / "transcript.zh.md").write_text("translated", encoding="utf-8")
+    older_meta = older_task / "meta.json"
+    newer_meta = newer_task / "meta.json"
+    older_meta.touch()
+    newer_meta.touch()
+
+    result = runner.invoke(
+        app,
+        [
+            "tasks",
+            "--output",
+            str(tmp_path),
+        ],
+    )
+
+    assert result.exit_code == 0
+    lines = [line for line in result.output.splitlines() if line.strip()]
+    assert "2026-04-29-newer-task" in lines[0]
+    assert "titles_generated" in lines[0]
+    assert "audio, transcript.zh" in lines[0]
+    assert "2026-04-28-older-task" in lines[1]
+
+
+def test_tasks_command_respects_limit(tmp_path):
+    for index in range(3):
+        task_dir = tmp_path / f"2026-04-2{index}-task-{index}"
+        _write_task_metadata(task_dir, status=TaskStatus.CREATED)
+        (task_dir / "meta.json").touch()
+
+    result = runner.invoke(
+        app,
+        [
+            "tasks",
+            "--output",
+            str(tmp_path),
+            "--limit",
+            "2",
+        ],
+    )
+
+    assert result.exit_code == 0
+    lines = [line for line in result.output.splitlines() if line.strip()]
+    assert len(lines) == 2
+
+
 def _write_task_metadata(tmp_path, *, status: TaskStatus) -> Path:
     metadata = TaskMetadata(
         source_url="https://www.youtube.com/watch?v=abc",

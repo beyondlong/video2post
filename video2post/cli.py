@@ -200,6 +200,29 @@ def retry(
         typer.echo("Nothing to retry.")
 
 
+@app.command("tasks")
+def list_tasks(
+    config: Annotated[
+        Path | None,
+        typer.Option("--config", "-c", help="Path to config.yaml."),
+    ] = None,
+    output: Annotated[
+        Path | None,
+        typer.Option("--output", "-o", help="Override configured output directory."),
+    ] = None,
+    limit: Annotated[
+        int,
+        typer.Option("--limit", help="Maximum number of recent tasks to show."),
+    ] = 10,
+) -> None:
+    """List recent task directories and their available artifacts."""
+    loaded_config = load_config(config)
+    output_dir = output or loaded_config.app.output_dir
+    task_lines = _collect_task_lines(output_dir, limit=limit)
+    for line in task_lines:
+        typer.echo(line)
+
+
 @config_app.command("show")
 def show_config(
     config: Annotated[
@@ -216,6 +239,36 @@ def _parse_targets(raw_targets: str | None) -> list[str] | None:
     if not raw_targets:
         return None
     return [target.strip() for target in raw_targets.split(",") if target.strip()]
+
+
+def _collect_task_lines(output_dir: Path, *, limit: int) -> list[str]:
+    metadata_files = sorted(
+        output_dir.glob("*/meta.json"),
+        key=lambda path: path.stat().st_mtime,
+        reverse=True,
+    )
+    task_lines: list[str] = []
+    for metadata_path in metadata_files[:limit]:
+        metadata = read_metadata(metadata_path)
+        artifacts = _available_artifacts(metadata.task_dir)
+        artifact_text = ", ".join(artifacts) if artifacts else "no artifacts yet"
+        task_lines.append(
+            f"{metadata.task_dir.name} | status={metadata.status.value} | artifacts={artifact_text}"
+        )
+    return task_lines
+
+
+def _available_artifacts(task_dir: Path) -> list[str]:
+    candidates = [
+        ("audio.wav", "audio"),
+        ("transcript.en.md", "transcript.en"),
+        ("transcript.zh.md", "transcript.zh"),
+        ("notes.md", "notes"),
+        ("article.md", "article"),
+        ("script.md", "script"),
+        ("titles.md", "titles"),
+    ]
+    return [label for filename, label in candidates if (task_dir / filename).exists()]
 
 
 def _metadata_path(task_dir: Path) -> Path:
