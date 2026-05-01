@@ -58,11 +58,33 @@ class YtDlpDownloader:
                 url,
             ]
         )
-        self._runner(command, check=True)
+        self._runner(command, check=True, capture_output=True, text=True)
         return _resolve_downloaded_audio(output, self._settings.preferred_audio_format)
+
+    def download_video(self, url: str, output_template: Path | str) -> Path:
+        output = Path(output_template)
+        output.parent.mkdir(parents=True, exist_ok=True)
+        command = self._base_command(
+            [
+                "--no-playlist",
+                "-f",
+                "bestvideo+bestaudio/best",
+                "--merge-output-format",
+                "mp4",
+                "-o",
+                str(output),
+                url,
+            ]
+        )
+        self._runner(command, check=True, capture_output=True, text=True)
+        return _resolve_downloaded_audio(output, "mp4")
 
     def _base_command(self, args: list[str]) -> list[str]:
         command = ["yt-dlp"]
+        if self._settings.js_runtimes:
+            command.extend(["--js-runtimes", self._settings.js_runtimes])
+        if self._settings.remote_components:
+            command.extend(["--remote-components", self._settings.remote_components])
         if self._settings.cookies_file:
             command.extend(["--cookies", str(self._settings.cookies_file)])
         if self._settings.cookies_from_browser:

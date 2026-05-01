@@ -4,7 +4,7 @@
 
 ## 总体原则
 
-- 先完成 YouTube 英文视频到中文二创内容的主流程。
+- 先完成 YouTube 英文视频到适合 X 平台发布的中文内容主流程。
 - 再补 B 站中文视频支持。
 - 所有阶段都要能落盘，避免失败后从头开始。
 - 第一版优先服务个人自用，不做复杂平台化能力。
@@ -178,15 +178,16 @@ prompts/
 
 ## 阶段 5：YouTube 主链路闭环
 
-目标：跑通第一版最核心能力：YouTube 英文视频到中文二创素材。
+目标：跑通第一版最核心能力：YouTube 英文视频到适合 X 平台发布的中文内容素材。
 
 主要任务：
 
 - 基于 `transcript.en.md` 生成 `transcript.zh.md`。
 - 生成 `notes.md`。
-- 生成 `article.md`。
-- 生成 `script.md`。
-- 生成 `titles.md`。
+- 生成 `x_article.md`。
+- 生成 `x_thread.md`。
+- 生成 `x_titles.md`。
+- 预留传统 `article.md`、`script.md`、`titles.md` 作为兼容产物。
 - 完成 pipeline 编排。
 - 实现 `video2post URL` 主命令。
 
@@ -201,9 +202,9 @@ audio.wav
 transcript.en.md
 transcript.zh.md
 notes.md
-article.md
-script.md
-titles.md
+x_article.md
+x_thread.md
+x_titles.md
 ```
 
 - 失败时能写入 `meta.json`。
@@ -273,7 +274,7 @@ titles.md
 
 ## 阶段 8：B 站中文视频支持
 
-目标：补齐第二个目标平台，支持中文视频转写和二创。
+目标：补齐第二个目标平台，支持中文视频转写和面向 X 的二创产物生成。
 
 当前状态：基础链路已开始实现。平台识别、音频处理、中文转写输出和基于中文稿的生成流程已经接通；`FunASR` Provider 已接入代码路径，也完成了一轮真实环境验收，但当前结论是不适合作为默认中文 ASR，仍保留为实验性方案。
 
@@ -285,14 +286,34 @@ titles.md
 - 定义中文 ASR Provider。
 - 接入 `FunASR`。
 - 生成中文逐字稿或中文整理稿。
-- 复用 notes/article/script/titles 生成流程。
+- 复用 notes 和 X 向稿件生成流程。
 
 验收标准：
 
 - 输入一个 B 站中文技术视频链接，可以生成完整任务目录。
 - 不依赖英文翻译流程。
 - 中文逐字稿可读。
-- 能生成笔记、长文、口播稿和标题。
+- 能生成笔记、X 长文、X thread、X 标题和兼容稿件。
+
+## 阶段 8.5：X 发布产物增强
+
+目标：让生成结果更贴近“可直接复制到 X 发布”的最终形态。
+
+主要任务：
+
+- 设计 `x_article.md` 的专用 Prompt 和结构。
+- 设计 `x_thread.md` 的拆分格式。
+- 设计 `x_titles.md` 的开头钩子和标题模板。
+- 从视频中抽取封面截图。
+- 输出 `cover.jpg` 和 `cover.meta.json`。
+- 支持指定截图时间点或自动选择少量候选帧。
+
+验收标准：
+
+- 同一条视频可以产出适合直接发 X 的长文正文。
+- 可以产出适合拆帖发布的 thread 版本。
+- 可以产出至少一张可用作封面的截图图片。
+- 封面图来源时间点和裁剪信息可追溯。
 
 ## 阶段 9：测试样例与回归检查
 
@@ -361,6 +382,7 @@ titles.md
 - 局部重新生成。
 - 配置展示。
 - 长视频分块。
+- X 平台成稿和封面图。
 - 固定测试样例。
 
 ### P2：第一版扩展目标

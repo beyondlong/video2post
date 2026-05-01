@@ -27,6 +27,7 @@
 
 ```bash
 brew install ffmpeg yt-dlp
+brew install node
 ```
 
 检查：
@@ -41,14 +42,14 @@ yt-dlp --version
 在项目根目录执行：
 
 ```bash
-python3 -m pip install -e .[dev]
-python3 -m pip install -e .[asr]
+python3 -m pip install -e '.[dev]'
+python3 -m pip install -e '.[asr]'
 ```
 
 如果你需要实验 `FunASR`：
 
 ```bash
-python3 -m pip install -e .[asr-chinese]
+python3 -m pip install -e '.[asr-chinese]'
 python3 -m pip install torch torchaudio
 ```
 
@@ -70,6 +71,24 @@ llm:
   model: MiniMax-M2.7
   request_timeout_seconds: 300
   retry_attempts: 2
+```
+
+如果某些 YouTube 视频提示需要登录或确认不是机器人，建议在 `config.yaml` 里再补：
+
+```yaml
+download:
+  cookies_from_browser: chrome
+  js_runtimes: node
+  remote_components: ejs:github
+```
+
+如果你的 YouTube 登录态在 Safari，就改成：
+
+```yaml
+download:
+  cookies_from_browser: safari
+  js_runtimes: node
+  remote_components: ejs:github
 ```
 
 ## 4. 正确运行 CLI
@@ -177,8 +196,8 @@ brew install ffmpeg yt-dlp
 如果缺的是 Python 包，重新执行：
 
 ```bash
-python3 -m pip install -e .[dev]
-python3 -m pip install -e .[asr]
+python3 -m pip install -e '.[dev]'
+python3 -m pip install -e '.[asr]'
 ```
 
 ### 3. 生成 `article.md` / `script.md` 时超时
@@ -221,3 +240,24 @@ yt-dlp --version
 这是当前已知现象。`FunASR` 在 macOS 上首次冷启动会拉较大的模型文件，当前更适合作为实验性 provider，而不是默认中文 ASR。
 
 如果你只是想先稳定跑通 MVP，建议优先沿用当前默认链路，不要把 `FunASR` 设为首选。
+
+### 7. YouTube 提示 `Sign in to confirm you’re not a bot`
+
+这通常不是项目代码坏了，而是 YouTube 对当前请求要求更强的登录态或浏览器环境。
+
+建议按这个顺序处理：
+
+```bash
+brew install node
+```
+
+然后在项目根目录创建 `config.yaml`：
+
+```yaml
+download:
+  cookies_from_browser: chrome
+  js_runtimes: node
+  remote_components: ejs:github
+```
+
+如果你的 YouTube 登录态在 Safari，就改成 `safari`。

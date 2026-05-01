@@ -38,3 +38,36 @@ class FfmpegAudioNormalizer:
             text=True,
         )
         return target_path
+
+
+class FfmpegVideoFrameExtractor:
+    def __init__(self, *, runner: Runner = subprocess.run) -> None:
+        self._runner = runner
+
+    def extract_frame(
+        self,
+        source: Path | str,
+        target: Path | str,
+        *,
+        at_seconds: float,
+    ) -> Path:
+        source_path = Path(source)
+        target_path = Path(target)
+        target_path.parent.mkdir(parents=True, exist_ok=True)
+        self._runner(
+            [
+                "ffmpeg",
+                "-y",
+                "-ss",
+                str(at_seconds),
+                "-i",
+                str(source_path),
+                "-frames:v",
+                "1",
+                str(target_path),
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        return target_path

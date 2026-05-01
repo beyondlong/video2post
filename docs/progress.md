@@ -1,6 +1,6 @@
 # video2post 当前进度记录
 
-> 更新时间：2026-04-30
+> 更新时间：2026-05-01
 >
 > 当前开发分支：`codex/phase-0-cli-skeleton`
 >
@@ -24,10 +24,11 @@
 - 可以下载 YouTube 音频并标准化为 `audio.wav`。
 - 可以接入 `faster-whisper` 生成英文转写稿。
 - 可以通过 OpenAI-compatible LLM Provider 生成中文二创内容。
+- 可以生成适合 X 平台发布的长文、thread、标题候选和封面图。
 - 可以对已有任务做局部生成和断点续跑。
 - 当前自动化测试通过：以最新 `pytest` 结果为准。
 
-目前项目还处于个人自用 MVP 阶段，优先目标仍然是先把 YouTube 英文技术视频到中文二创内容的流程跑稳。
+目前项目还处于个人自用 MVP 阶段，优先目标仍然是先把 YouTube 英文技术视频到适合 X 平台发布的中文内容流程跑稳。
 
 ## 已完成能力
 
@@ -297,7 +298,32 @@ video2post process URL --no-download
 - 下载和标准化音频。
 - 可选执行英文 ASR。
 - 可选执行 LLM 二创生成。
+- 可选生成 X 向正文和封面图。
 - 输出任务目录路径、平台和阶段产物路径。
+
+### 7.1 X 向正文与封面图产物
+
+当前已新增 X 平台优先产物：
+
+- `x_article.md`
+- `x_thread.md`
+- `x_titles.md`
+- `cover.jpg`
+- `cover.meta.json`
+
+当前能力：
+
+- 可以基于已有转写稿生成适合 X 平台直接复制发布的长文和 thread。
+- 可以生成适合 X 发布场景的标题与开头钩子候选。
+- 可以通过 `cover` 目标从视频中按指定时间点截取封面图。
+- 可以通过 `cover.meta.json` 回溯封面图来源时间点和源链接。
+
+当前可用命令示例：
+
+```bash
+video2post generate TASK_DIR --targets x_article,x_thread,x_titles
+video2post generate TASK_DIR --targets cover --cover-at 00:00:30
+```
 
 ### 8. 局部生成和断点续跑
 
@@ -440,11 +466,11 @@ video2post retry TASK_DIR --generate --targets titles
 
 ## 自动化测试状态
 
-当前全量测试通过：
+当前相关测试通过：
 
 ```bash
-python3 -m pytest -q
-# 41 passed
+python3 -m pytest tests/test_pipeline_generate.py tests/test_cli.py -q
+# 37 passed
 ```
 
 当前测试覆盖方向：
@@ -463,20 +489,67 @@ python3 -m pytest -q
 - ASR 转写逻辑。
 - LLM Prompt 和 Provider 逻辑。
 
+## 开发状态总览
+
+### 已完成
+
+- 阶段 0：项目基础骨架
+- 阶段 1：任务模型与文件输出
+- 阶段 2：YouTube 音频下载与标准化
+- 阶段 3：英文 ASR 转写
+- 阶段 4：LLM Provider 与 Prompt 模板
+- 阶段 5：YouTube 主链路闭环
+- 阶段 6：重跑与局部生成
+- 阶段 9：固定样例、手工回归基线、真实产物对照文档
+- 阶段 10：安装说明、快速开始、`doctor`、常见问题排查
+
+### 部分完成
+
+- 阶段 7：长视频分块处理
+  - 已完成基础分块、chunk 摘要、摘要复用
+  - 仍待完善更精细的 segment 切块、超长视频多级汇总、更多真实长视频验收
+
+- 阶段 8：B 站中文视频支持
+  - 已完成平台识别、音频处理、中文稿输出、`notes/article/script/titles` 生成
+  - 已完成真实 B 站样例验收
+  - `FunASR` 已接入并做过真实环境测试，但当前不建议作为默认中文 ASR
+  - 仍待补更多真实样例交叉验证，以及中文 ASR 默认方案收口
+
+### 已记录但暂缓实现
+
+- 阶段 7.5：`--fast` 快速出稿模式
+  - 已讨论并记录方向
+  - 暂未进入正式开发
+
+### 新增主线方向
+
+- 优先服务 X 平台发布场景
+  - 目标产物会逐步从通用 `article/script/titles`，转向更适合直接发布的 `x_article/x_thread/x_titles`
+  - 同时计划补充视频截图封面图产物，例如 `cover.jpg`
+
+### 尚未开始的后续版本方向
+
+- Web 工作台
+- 桌面应用
+- 本地素材库和检索
+- 批量任务队列
+- 自动发布到公众号、微博、小红书、B 站等平台
+- 本地音频/视频文件输入兜底方案
+
 ## 当前限制
 
 目前仍然没有完成：
 
-- 长视频分块处理。
-- B 站中文视频完整链路。
-- 中文 ASR Provider。
 - Web 工作台。
 - 桌面应用。
 - 批量任务队列。
 - 自动发布到公众号、微博、小红书、B 站等平台。
 - 素材库和检索。
 
-阶段 7 已开始实现。当前已经具备基础长视频分块能力：当转写稿长度超过 `generation.chunk_max_chars` 时，系统会先输出 `chunks/` 和 `summaries/` 中间文件，再使用合并后的 chunk 摘要生成最终二创内容。重新生成最终稿件时，已有且非空的 chunk 摘要会被复用，避免重复调用 LLM。
+长视频和 B 站链路并不是“完全没做”，而是还没有收口到稳定完成态：
+
+- 长视频分块已具备基础能力：当转写稿长度超过 `generation.chunk_max_chars` 时，系统会先输出 `chunks/` 和 `summaries/` 中间文件，再使用合并后的 chunk 摘要生成最终二创内容。重新生成最终稿件时，已有且非空的 chunk 摘要会被复用，避免重复调用 LLM。
+- B 站中文链路已经能真实跑通，但仍需要继续补真实样例和中文 ASR 默认方案验证。
 
 当前仍需继续完善：
 
@@ -484,7 +557,7 @@ python3 -m pytest -q
 - 针对超长视频的全局摘要和多级汇总。
 - 更完整的真实长视频测试。
 - `--fast` 模式和更激进的“快速出稿”链路优化。
-- B 站真实样例验收和 `FunASR` 独立接入。
+- B 站更多真实样例验收和 `FunASR` 独立演进。
 
 ## 下一步建议
 

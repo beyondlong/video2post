@@ -2,7 +2,7 @@
 
 `video2post` 是一个面向技术博主和内容创作者的本地内容生产工具。它的目标是把高质量视频内容，尤其是 YouTube 英文技术视频和 B 站中文技术视频，转化为可编辑、可二次创作、可发布的中文内容素材。
 
-项目当前处于早期规划和 MVP 阶段，第一版会优先做成本地 CLI 工具，用最短路径跑通“视频链接 -> 音频 -> 转写 -> 中文整理 -> 二创文案”的完整流程。
+项目当前处于早期规划和 MVP 阶段，第一版会优先做成本地 CLI 工具，用最短路径跑通“视频链接 -> 音频 -> 转写 -> 中文整理 -> 适合 X 平台发布的长文与 thread 素材”的完整流程。
 
 当前已完成进度和可测试效果见：[docs/progress.md](docs/progress.md)。固定回归样例见：[docs/samples.md](docs/samples.md)。手工回归检查表见：[docs/manual-checklist.md](docs/manual-checklist.md)。真实验收产物对照见：[docs/test-fixtures.md](docs/test-fixtures.md)。
 
@@ -16,13 +16,14 @@
 
 ```bash
 brew install ffmpeg yt-dlp
+brew install node
 ```
 
 2. 安装项目依赖
 
 ```bash
-python3 -m pip install -e .[dev]
-python3 -m pip install -e .[asr]
+python3 -m pip install -e '.[dev]'
+python3 -m pip install -e '.[asr]'
 ```
 
 3. 配置 `.env`
@@ -32,6 +33,17 @@ VIDEO2POST_LLM_API_KEY=your-key
 VIDEO2POST_LLM_BASE_URL=https://api.minimaxi.com/v1
 VIDEO2POST_LLM_MODEL=MiniMax-M2.7
 ```
+
+如果某些 YouTube 视频提示需要登录或确认不是机器人，建议再创建一个 `config.yaml`：
+
+```yaml
+download:
+  cookies_from_browser: chrome
+  js_runtimes: node
+  remote_components: ejs:github
+```
+
+如果你的 YouTube 登录态在 Safari，就把 `chrome` 改成 `safari`。
 
 4. 确认 CLI 可用
 
@@ -59,7 +71,8 @@ python3 -m video2post.cli process "https://www.youtube.com/watch?v=474wZZHoWN4" 
 - 自动下载或提取视频音频。
 - 将 YouTube 英文技术视频转写并整理为中文内容。
 - 将 B 站中文技术视频转写并结构化整理。
-- 生成技术长文、短视频口播稿、标题候选和内容笔记。
+- 优先生成适合 X 平台发布的长文、thread 素材、标题候选和内容笔记。
+- 后续支持从视频截图生成适合作为 X 封面的图片。
 - 所有中间结果和最终结果都保存为本地文件，方便人工校对和复用。
 
 ## 第一版形态
@@ -88,7 +101,8 @@ python3 -m video2post.cli samples
 
 ```bash
 video2post process URL --output ./outputs
-video2post process URL --generate --targets article,script,titles
+video2post process URL --generate --targets x_article,x_thread,x_titles
+video2post process URL --generate --targets cover --cover-at 00:00:30
 video2post process URL --cleanup-source
 video2post process URL --no-transcribe
 video2post process URL --no-download
@@ -131,6 +145,11 @@ outputs/
     transcript.en.md
     transcript.zh.md
     notes.md
+    x_article.md
+    x_thread.md
+    x_titles.md
+    cover.jpg
+    cover.meta.json
     article.md
     script.md
     titles.md
@@ -143,6 +162,11 @@ outputs/
 - `transcript.en.md`：YouTube 英文视频的英文逐字稿。
 - `transcript.zh.md`：中文翻译或中文整理稿。
 - `notes.md`：核心观点、技术概念、金句和二创角度。
+- `x_article.md`：适合直接复制到 X 长文的中文成稿。
+- `x_thread.md`：适合拆成 X thread 的短段版本。
+- `x_titles.md`：适合 X 发布场景的开头钩子和标题候选。
+- `cover.jpg`：从视频截图适配出的封面图。
+- `cover.meta.json`：封面图来源时间点、源链接和导出信息。
 - `article.md`：技术博客或公众号长文草稿。
 - `script.md`：短视频口播稿。
 - `titles.md`：不同发布场景的标题候选。
@@ -175,7 +199,7 @@ outputs/
 第一版 MVP 验收重点：
 
 - 能处理一个 YouTube 英文技术视频链接。
-- 能生成 `meta.json`、`audio.wav`、`transcript.en.md`、`transcript.zh.md`、`notes.md`、`article.md`、`script.md` 和 `titles.md`。
+- 能生成 `meta.json`、`audio.wav`、`transcript.en.md`、`transcript.zh.md`、`notes.md`、`x_article.md`、`x_thread.md`、`x_titles.md` 和 `cover.jpg`。
 - 失败时能记录失败阶段和错误信息。
 - 已完成阶段可以跳过，支持后续重跑和重新生成二创内容。
 
@@ -184,7 +208,8 @@ outputs/
 ```bash
 video2post process URL
 video2post retry TASK_DIR
-video2post generate TASK_DIR --targets article,script,titles
+video2post generate TASK_DIR --targets x_article,x_thread,x_titles
+video2post generate TASK_DIR --targets cover --cover-at 00:00:30
 video2post doctor
 video2post samples
 video2post config show

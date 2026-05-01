@@ -1,7 +1,9 @@
 import subprocess
+import json
 from pathlib import Path
 
 from video2post.audio.ffmpeg import FfmpegAudioNormalizer
+from video2post.audio.ffmpeg import FfmpegVideoFrameExtractor
 from video2post.asr.faster_whisper import FasterWhisperTranscriber
 from video2post.asr.funasr import FunASRTranscriber
 from video2post.config import AppConfig
@@ -133,6 +135,10 @@ def transcribe_audio(
 TARGET_OUTPUTS = {
     "translation": ("transcript.zh.md", TaskStatus.TRANSLATED_OR_CLEANED),
     "notes": ("notes.md", TaskStatus.NOTES_GENERATED),
+    "cover": ("cover.jpg", TaskStatus.COVER_GENERATED),
+    "x_article": ("x_article.md", TaskStatus.X_ARTICLE_GENERATED),
+    "x_thread": ("x_thread.md", TaskStatus.X_THREAD_GENERATED),
+    "x_titles": ("x_titles.md", TaskStatus.X_TITLES_GENERATED),
     "article": ("article.md", TaskStatus.ARTICLE_GENERATED),
     "script": ("script.md", TaskStatus.SCRIPT_GENERATED),
     "titles": ("titles.md", TaskStatus.TITLES_GENERATED),
@@ -146,25 +152,45 @@ def generate_outputs(
     provider: OpenAICompatibleProvider | None = None,
     prompt_dir: Path | str = "prompts",
     targets: list[str] | None = None,
+    downloader: YtDlpDownloader | None = None,
+    cover_extractor: FfmpegVideoFrameExtractor | None = None,
+    cover_at: str | None = None,
 ) -> list[Path]:
     metadata = read_metadata(metadata_path)
-    active_provider = provider or OpenAICompatibleProvider(settings=config.llm)
-    renderer = PromptRenderer(prompt_dir)
     selected_targets = _selected_generation_targets(metadata, config, targets)
-    transcript = _source_transcript_path(metadata.task_dir).read_text(encoding="utf-8")
     generated_paths: list[Path] = []
+    llm_targets = [target for target in selected_targets if target != "cover"]
 
     try:
-        generation_transcript = _prepare_generation_transcript(
-            metadata,
-            transcript,
-            config,
-            renderer,
-            active_provider,
-        )
+        generation_transcript = ""
+        active_provider = None
+        renderer = None
+        if llm_targets:
+            active_provider = provider or OpenAICompatibleProvider(settings=config.llm)
+            renderer = PromptRenderer(prompt_dir)
+            transcript = _source_transcript_path(metadata.task_dir).read_text(encoding="utf-8")
+            generation_transcript = _prepare_generation_transcript(
+                metadata,
+                transcript,
+                config,
+                renderer,
+                active_provider,
+            )
         for target in selected_targets:
             if target not in TARGET_OUTPUTS:
                 raise ValueError(f"Unknown generation target: {target}")
+            if target == "cover":
+                generated_paths.extend(
+                    _generate_cover_artifacts(
+                        metadata,
+                        config,
+                        downloader=downloader,
+                        cover_extractor=cover_extractor,
+                        cover_at=cover_at,
+                    )
+                )
+                metadata = read_metadata(metadata_path)
+                continue
             filename, status = TARGET_OUTPUTS[target]
             prompt = renderer.render(
                 target,
@@ -197,6 +223,77 @@ def generate_outputs(
             retryable=True,
         )
         raise
+
+
+def _generate_cover_artifacts(
+    metadata: TaskMetadata,
+    config: AppConfig,
+    *,
+    downloader: YtDlpDownloader | None = None,
+    cover_extractor: FfmpegVideoFrameExtractor | None = None,
+    cover_at: str | None = None,
+) -> list[Path]:
+    active_downloader = downloader or YtDlpDownloader(settings=config.download)
+    active_cover_extractor = cover_extractor or FfmpegVideoFrameExtractor()
+    source_template = metadata.task_dir / "cover-source.%(ext)s"
+    source_video = active_downloader.download_video(metadata.source_url, source_template)
+    cover_path = metadata.task_dir / "cover.jpg"
+    cover_meta_path = metadata.task_dir / "cover.meta.json"
+    cover_seconds = _resolve_cover_time_seconds(metadata, cover_at)
+
+    try:
+        active_cover_extractor.extract_frame(
+            source_video,
+            cover_path,
+            at_seconds=cover_seconds,
+        )
+        cover_meta_path.write_text(
+            json.dumps(
+                {
+                    "source_url": metadata.source_url,
+                    "platform": metadata.platform,
+                    "video_title": metadata.video.title,
+                    "cover_at": cover_at,
+                    "cover_at_seconds": cover_seconds,
+                    "source_video": source_video.name,
+                    "output_file": cover_path.name,
+                },
+                indent=2,
+                ensure_ascii=False,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        source_video.unlink(missing_ok=True)
+        metadata.status = TaskStatus.COVER_GENERATED
+        metadata.error = None
+        write_metadata(metadata)
+        return [cover_path, cover_meta_path]
+    except Exception:
+        source_video.unlink(missing_ok=True)
+        raise
+
+
+def _resolve_cover_time_seconds(metadata: TaskMetadata, cover_at: str | None) -> float:
+    if cover_at:
+        return _parse_time_to_seconds(cover_at)
+    duration_seconds = metadata.video.duration_seconds
+    if duration_seconds:
+        return float(round(duration_seconds * 0.2, 2))
+    return 30.0
+
+
+def _parse_time_to_seconds(value: str) -> float:
+    if ":" not in value:
+        return float(value)
+    parts = [float(part) for part in value.split(":")]
+    if len(parts) == 3:
+        hours, minutes, seconds = parts
+        return hours * 3600 + minutes * 60 + seconds
+    if len(parts) == 2:
+        minutes, seconds = parts
+        return minutes * 60 + seconds
+    raise ValueError(f"Unsupported time value: {value}")
 
 
 def _prepare_generation_transcript(

@@ -25,7 +25,7 @@ video2post config show
 推荐样例：`youtube-short-tech`
 
 ```bash
-video2post process "https://www.youtube.com/watch?v=474wZZHoWN4" --output ./outputs-check --generate --targets notes,titles --cleanup-source
+video2post process "https://www.youtube.com/watch?v=474wZZHoWN4" --output ./outputs-check --generate --targets x_article,x_thread,x_titles --cleanup-source
 ```
 
 重点检查：
@@ -34,12 +34,13 @@ video2post process "https://www.youtube.com/watch?v=474wZZHoWN4" --output ./outp
 - `meta.json`
 - `audio.wav`
 - `transcript.en.md`
-- `notes.md`
-- `titles.md`
+- `x_article.md`
+- `x_thread.md`
+- `x_titles.md`
 
 状态预期：
 
-- 至少进入 `notes_generated` 或 `titles_generated`
+- 至少进入 `x_article_generated`、`x_thread_generated` 或 `x_titles_generated`
 - 如果默认全套生成，则应为 `completed`
 
 3. B 站中文链路
@@ -69,6 +70,7 @@ video2post process "https://www.bilibili.com/video/BV1fA9mBPEZt?t=7.0" --output 
 
 ```bash
 video2post generate TASK_DIR --targets titles
+video2post generate TASK_DIR --targets cover --cover-at 00:00:30
 ```
 
 重点检查：
@@ -76,6 +78,7 @@ video2post generate TASK_DIR --targets titles
 - 不重新下载音频
 - 不重新转写
 - 只更新目标文件
+- 生成 `cover` 时应输出 `cover.jpg` 和 `cover.meta.json`
 
 5. 断点续跑
 

@@ -48,7 +48,7 @@ def test_fetch_metadata_maps_ytdlp_json():
         published_at="20260429",
     )
     command, kwargs = runner.calls[0]
-    assert command[:3] == ["yt-dlp", "--dump-json", "--no-playlist"]
+    assert command[:5] == ["yt-dlp", "--js-runtimes", "node", "--dump-json", "--no-playlist"]
     assert kwargs["check"] is True
     assert kwargs["capture_output"] is True
     assert kwargs["text"] is True
@@ -85,9 +85,49 @@ def test_download_audio_builds_expected_command(tmp_path):
     downloader.download_audio("https://youtu.be/abc", target)
 
     command, kwargs = runner.calls[0]
-    assert command[:4] == ["yt-dlp", "--no-playlist", "-f", "bestaudio/best"]
+    assert command[:6] == [
+        "yt-dlp",
+        "--js-runtimes",
+        "node",
+        "--no-playlist",
+        "-f",
+        "bestaudio/best",
+    ]
     assert "--extract-audio" not in command
     assert "--audio-format" not in command
     assert command[command.index("-o") + 1] == str(target)
     assert command[-1] == "https://youtu.be/abc"
     assert kwargs["check"] is True
+    assert kwargs["capture_output"] is True
+    assert kwargs["text"] is True
+
+
+def test_download_audio_can_override_js_runtime(tmp_path):
+    from video2post.config import DownloadSettings
+
+    runner = FakeRunner()
+    downloader = YtDlpDownloader(
+        settings=DownloadSettings(js_runtimes="deno"),
+        runner=runner,
+    )
+
+    downloader.download_audio("https://youtu.be/abc", tmp_path / "source.%(ext)s")
+
+    command, _ = runner.calls[0]
+    assert command[:3] == ["yt-dlp", "--js-runtimes", "deno"]
+
+
+def test_download_audio_can_enable_remote_components(tmp_path):
+    from video2post.config import DownloadSettings
+
+    runner = FakeRunner()
+    downloader = YtDlpDownloader(
+        settings=DownloadSettings(remote_components="ejs:github"),
+        runner=runner,
+    )
+
+    downloader.download_audio("https://youtu.be/abc", tmp_path / "source.%(ext)s")
+
+    command, _ = runner.calls[0]
+    assert "--remote-components" in command
+    assert command[command.index("--remote-components") + 1] == "ejs:github"

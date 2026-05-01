@@ -1,4 +1,5 @@
 from pathlib import Path
+import subprocess
 
 from typer.testing import CliRunner
 
@@ -152,8 +153,8 @@ def test_process_cleanup_source_option_overrides_config(tmp_path):
 def test_process_can_run_full_pipeline_with_generate(monkeypatch, tmp_path):
     calls = []
 
-    def fake_fetch_metadata(url):
-        calls.append(("fetch_metadata", url))
+    def fake_fetch_metadata(url, config=None):
+        calls.append(("fetch_metadata", url, config.download.cookies_from_browser))
         from video2post.models import VideoMetadata
 
         return VideoMetadata(title="Real Video Title")
@@ -166,7 +167,7 @@ def test_process_can_run_full_pipeline_with_generate(monkeypatch, tmp_path):
         calls.append(("transcribe", metadata_path.name))
         return metadata_path.parent / "transcript.en.md"
 
-    def fake_generate(metadata_path, config, targets=None):
+    def fake_generate(metadata_path, config, targets=None, cover_at=None):
         calls.append(("generate", tuple(targets or [])))
         return [metadata_path.parent / "titles.md"]
 
@@ -190,7 +191,7 @@ def test_process_can_run_full_pipeline_with_generate(monkeypatch, tmp_path):
 
     assert result.exit_code == 0
     assert calls == [
-        ("fetch_metadata", "https://www.youtube.com/watch?v=abc"),
+        ("fetch_metadata", "https://www.youtube.com/watch?v=abc", "chrome"),
         ("audio", "meta.json"),
         ("transcribe", "meta.json"),
         ("generate", ("titles",)),
@@ -205,7 +206,7 @@ def test_process_can_skip_transcribe_and_generate(monkeypatch, tmp_path):
 
     monkeypatch.setattr(
         "video2post.cli.fetch_initial_video_metadata",
-        lambda url: calls.append("fetch_metadata") or None,
+        lambda url, config=None: calls.append(("fetch_metadata", config)) or None,
     )
     monkeypatch.setattr(
         "video2post.cli.prepare_audio",
@@ -233,14 +234,75 @@ def test_process_can_skip_transcribe_and_generate(monkeypatch, tmp_path):
     )
 
     assert result.exit_code == 0
-    assert calls == ["fetch_metadata", "audio"]
+    assert len(calls) == 2
+    assert calls[0][0] == "fetch_metadata"
+    assert calls[0][1] is not None
+    assert calls[1] == "audio"
+
+
+def test_process_uses_loaded_config_for_initial_metadata_fetch(monkeypatch, tmp_path):
+    config_file = tmp_path / "config.yaml"
+    config_file.write_text(
+        """
+download:
+  cookies_from_browser: chrome
+  js_runtimes: node
+  remote_components: ejs:github
+""".strip(),
+        encoding="utf-8",
+    )
+    calls = []
+
+    def fake_fetch_metadata(url, config=None):
+        calls.append(
+            (
+                url,
+                config.download.cookies_from_browser,
+                config.download.js_runtimes,
+                config.download.remote_components,
+            )
+        )
+        return VideoMetadata(title="Configured Title")
+
+    monkeypatch.setattr("video2post.cli.fetch_initial_video_metadata", fake_fetch_metadata)
+    monkeypatch.setattr(
+        "video2post.cli.prepare_audio",
+        lambda metadata_path, config: metadata_path.parent / "audio.wav",
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            "process",
+            "https://www.youtube.com/watch?v=abc",
+            "--config",
+            str(config_file),
+            "--output",
+            str(tmp_path / "outputs"),
+            "--no-transcribe",
+            "--no-generate",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert calls == [
+        (
+            "https://www.youtube.com/watch?v=abc",
+            "chrome",
+            "node",
+            "ejs:github",
+        )
+    ]
+    assert list((tmp_path / "outputs").glob("*/meta.json"))[0].parent.name.endswith(
+        "configured-title"
+    )
 
 
 def test_generate_command_regenerates_selected_targets(monkeypatch, tmp_path):
     metadata_path = _write_task_metadata(tmp_path, status=TaskStatus.TRANSCRIBED)
     calls = []
 
-    def fake_generate(metadata_path_arg, config, targets=None):
+    def fake_generate(metadata_path_arg, config, targets=None, cover_at=None):
         calls.append((metadata_path_arg, tuple(targets or [])))
         return [metadata_path_arg.parent / "titles.md"]
 
@@ -259,6 +321,32 @@ def test_generate_command_regenerates_selected_targets(monkeypatch, tmp_path):
     assert result.exit_code == 0
     assert calls == [(metadata_path, ("titles",))]
     assert "Generated:" in result.output
+
+
+def test_generate_command_passes_cover_time(monkeypatch, tmp_path):
+    metadata_path = _write_task_metadata(tmp_path, status=TaskStatus.TRANSCRIBED)
+    calls = []
+
+    def fake_generate(metadata_path_arg, config, targets=None, cover_at=None):
+        calls.append((metadata_path_arg, tuple(targets or []), cover_at))
+        return [metadata_path_arg.parent / "cover.jpg"]
+
+    monkeypatch.setattr("video2post.cli.generate_outputs", fake_generate)
+
+    result = runner.invoke(
+        app,
+        [
+            "generate",
+            str(tmp_path),
+            "--targets",
+            "cover",
+            "--cover-at",
+            "00:00:30",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert calls == [(metadata_path, ("cover",), "00:00:30")]
 
 
 def test_retry_transcribes_when_audio_exists_but_transcript_is_missing(monkeypatch, tmp_path):
@@ -304,7 +392,7 @@ def test_retry_can_generate_after_transcription(monkeypatch, tmp_path):
     )
     monkeypatch.setattr(
         "video2post.cli.generate_outputs",
-        lambda metadata_path_arg, config, targets=None: calls.append(
+        lambda metadata_path_arg, config, targets=None, cover_at=None: calls.append(
             ("generate", tuple(targets or []))
         )
         or [metadata_path_arg.parent / "titles.md"],
@@ -366,7 +454,7 @@ generation:
 
     monkeypatch.setattr(
         "video2post.cli.fetch_initial_video_metadata",
-        lambda url: None,
+        lambda url, config=None: None,
     )
     monkeypatch.setattr(
         "video2post.cli.prepare_audio",
@@ -377,7 +465,7 @@ generation:
         lambda metadata_path, config: metadata_path.parent / "transcript.en.md",
     )
 
-    def fake_generate(metadata_path, config, targets=None):
+    def fake_generate(metadata_path, config, targets=None, cover_at=None):
         calls.append((config.generation.chunk_max_chars, tuple(targets or [])))
         return [metadata_path.parent / "notes.md"]
 
@@ -407,7 +495,7 @@ def test_process_bilibili_pipeline_can_generate_from_chinese_transcript(monkeypa
 
     monkeypatch.setattr(
         "video2post.cli.fetch_initial_video_metadata",
-        lambda url: VideoMetadata(title="Bilibili Video"),
+        lambda url, config=None: VideoMetadata(title="Bilibili Video"),
     )
     monkeypatch.setattr(
         "video2post.cli.prepare_audio",
@@ -420,7 +508,7 @@ def test_process_bilibili_pipeline_can_generate_from_chinese_transcript(monkeypa
         transcript.write_text("中文整理稿", encoding="utf-8")
         return transcript
 
-    def fake_generate(metadata_path, config, targets=None):
+    def fake_generate(metadata_path, config, targets=None, cover_at=None):
         calls.append(("generate", tuple(targets or [])))
         return [metadata_path.parent / "notes.md"]
 
@@ -443,6 +531,76 @@ def test_process_bilibili_pipeline_can_generate_from_chinese_transcript(monkeypa
     assert result.exit_code == 0
     assert calls == [("transcribe", "meta.json"), ("generate", ("notes",))]
     assert "Platform: bilibili" in result.output
+
+
+def test_process_shows_friendly_youtube_cookie_guidance(monkeypatch, tmp_path):
+    monkeypatch.setattr(
+        "video2post.cli.fetch_initial_video_metadata",
+        lambda url, config=None: VideoMetadata(title="Needs Cookies"),
+    )
+
+    def fail_prepare(metadata_path, config):
+        raise subprocess.CalledProcessError(
+            1,
+            ["yt-dlp"],
+            stderr=(
+                "ERROR: Sign in to confirm you’re not a bot. "
+                "Use --cookies-from-browser or --cookies for the authentication."
+            ),
+        )
+
+    monkeypatch.setattr("video2post.cli.prepare_audio", fail_prepare)
+
+    result = runner.invoke(
+        app,
+        [
+            "process",
+            "https://www.youtube.com/watch?v=abc",
+            "--output",
+            str(tmp_path),
+        ],
+    )
+
+    assert result.exit_code == 1
+    assert "YouTube download failed" in result.output
+    assert "brew install node" in result.output
+    assert "cookies_from_browser: chrome" in result.output
+
+
+def test_process_shows_friendly_youtube_ejs_guidance(monkeypatch, tmp_path):
+    monkeypatch.setattr(
+        "video2post.cli.fetch_initial_video_metadata",
+        lambda url, config=None: VideoMetadata(title="Needs EJS"),
+    )
+
+    def fail_prepare(metadata_path, config):
+        raise subprocess.CalledProcessError(
+            1,
+            ["yt-dlp"],
+            stderr=(
+                "WARNING: n challenge solving failed. "
+                "ERROR: Requested format is not available. "
+                "Only images are available for download."
+            ),
+        )
+
+    monkeypatch.setattr("video2post.cli.prepare_audio", fail_prepare)
+
+    result = runner.invoke(
+        app,
+        [
+            "process",
+            "https://www.youtube.com/watch?v=abc",
+            "--output",
+            str(tmp_path),
+        ],
+    )
+
+    assert result.exit_code == 1
+    assert "JavaScript challenge" in result.output
+    assert "node -v" in result.output
+    assert 'yt-dlp[default]' in result.output
+    assert "remote_components: ejs:github" in result.output
 
 
 def test_tasks_command_lists_recent_tasks_from_output_directory(tmp_path):

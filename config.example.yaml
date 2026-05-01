@@ -7,7 +7,13 @@ app:
 download:
   preferred_audio_format: wav
   cookies_file:
+  # Useful for YouTube links that require a logged-in browser session.
+  # Example: chrome or safari
   cookies_from_browser:
+  # Useful for YouTube EJS / challenge solving. Node is a practical default.
+  js_runtimes: node
+  # Optional but useful when YouTube requires the EJS remote challenge solver.
+  remote_components:
 
 audio:
   sample_rate: 16000

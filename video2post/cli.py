@@ -73,6 +73,13 @@ def process(
             help="Comma-separated generation targets, e.g. article,script,titles.",
         ),
     ] = None,
+    cover_at: Annotated[
+        str | None,
+        typer.Option(
+            "--cover-at",
+            help="Optional screenshot time for cover generation, e.g. 00:00:30.",
+        ),
+    ] = None,
     cleanup_source: Annotated[
         bool | None,
         typer.Option(
@@ -87,7 +94,9 @@ def process(
         loaded_config.app.cleanup_source = cleanup_source
     output_dir = output or loaded_config.app.output_dir
     platform = detect_platform(url)
-    video_metadata = fetch_initial_video_metadata(url) or VideoMetadata(title="untitled")
+    video_metadata = (
+        fetch_initial_video_metadata(url, config=loaded_config) or VideoMetadata(title="untitled")
+    )
     metadata = create_task_workspace(
         output_dir=output_dir,
         source_url=url,
@@ -102,25 +111,29 @@ def process(
         f"Source cleanup: {'enabled' if loaded_config.app.cleanup_source else 'disabled'}"
     )
 
-    if download:
-        audio_path = prepare_audio(metadata.task_dir / "meta.json", loaded_config)
-        typer.echo(f"Audio: {audio_path}")
-        if transcribe:
-            transcript_path = transcribe_audio(metadata.task_dir / "meta.json", loaded_config)
-            typer.echo(f"Transcript: {transcript_path}")
-            if generate:
-                selected_targets = _parse_targets(targets)
-                generated_paths = generate_outputs(
-                    metadata.task_dir / "meta.json",
-                    loaded_config,
-                    targets=selected_targets,
-                )
-                for generated_path in generated_paths:
-                    typer.echo(f"Generated: {generated_path}")
+    try:
+        if download:
+            audio_path = prepare_audio(metadata.task_dir / "meta.json", loaded_config)
+            typer.echo(f"Audio: {audio_path}")
+            if transcribe:
+                transcript_path = transcribe_audio(metadata.task_dir / "meta.json", loaded_config)
+                typer.echo(f"Transcript: {transcript_path}")
+                if generate:
+                    selected_targets = _parse_targets(targets)
+                    generated_paths = generate_outputs(
+                        metadata.task_dir / "meta.json",
+                        loaded_config,
+                        targets=selected_targets,
+                        cover_at=cover_at,
+                    )
+                    for generated_path in generated_paths:
+                        typer.echo(f"Generated: {generated_path}")
+            else:
+                typer.echo("Transcription skipped.")
         else:
-            typer.echo("Transcription skipped.")
-    else:
-        typer.echo("Download skipped.")
+            typer.echo("Download skipped.")
+    except subprocess.CalledProcessError as error:
+        _handle_cli_process_error(error, platform=platform)
 
 
 @app.command("generate")
@@ -137,6 +150,13 @@ def generate_command(
             help="Comma-separated generation targets, e.g. article,script,titles.",
         ),
     ] = None,
+    cover_at: Annotated[
+        str | None,
+        typer.Option(
+            "--cover-at",
+            help="Optional screenshot time for cover generation, e.g. 00:00:30.",
+        ),
+    ] = None,
 ) -> None:
     """Regenerate derivative Markdown files for an existing task."""
     loaded_config = load_config(config)
@@ -145,6 +165,7 @@ def generate_command(
         metadata_path,
         loaded_config,
         targets=_parse_targets(targets),
+        cover_at=cover_at,
     )
     _echo_generated_paths(generated_paths)
 
@@ -168,6 +189,13 @@ def retry(
         typer.Option(
             "--targets",
             help="Comma-separated generation targets, e.g. article,script,titles.",
+        ),
+    ] = None,
+    cover_at: Annotated[
+        str | None,
+        typer.Option(
+            "--cover-at",
+            help="Optional screenshot time for cover generation, e.g. 00:00:30.",
         ),
     ] = None,
 ) -> None:
@@ -194,6 +222,7 @@ def retry(
             metadata_path,
             loaded_config,
             targets=_parse_targets(targets),
+            cover_at=cover_at,
         )
         _echo_generated_paths(generated_paths)
         did_work = True
@@ -303,6 +332,10 @@ def _available_artifacts(task_dir: Path) -> list[str]:
         ("transcript.en.md", "transcript.en"),
         ("transcript.zh.md", "transcript.zh"),
         ("notes.md", "notes"),
+        ("cover.jpg", "cover"),
+        ("x_article.md", "x_article"),
+        ("x_thread.md", "x_thread"),
+        ("x_titles.md", "x_titles"),
         ("article.md", "article"),
         ("script.md", "script"),
         ("titles.md", "titles"),
@@ -319,11 +352,57 @@ def _echo_generated_paths(generated_paths: list[Path]) -> None:
         typer.echo(f"Generated: {generated_path}")
 
 
-def fetch_initial_video_metadata(url: str) -> VideoMetadata:
+def fetch_initial_video_metadata(url: str, config=None) -> VideoMetadata:
     try:
-        return YtDlpDownloader().fetch_metadata(url)
+        downloader = YtDlpDownloader(settings=config.download if config else None)
+        return downloader.fetch_metadata(url)
     except subprocess.CalledProcessError:
         return VideoMetadata(title="untitled")
+
+
+def _handle_cli_process_error(error: subprocess.CalledProcessError, *, platform: str) -> None:
+    stderr = (error.stderr or "").strip()
+    if platform == "youtube" and _looks_like_youtube_cookie_issue(stderr):
+        typer.echo("YouTube download failed: the video likely needs browser cookies.")
+        typer.echo("Recommended next steps:")
+        typer.echo("1. Install a JavaScript runtime: brew install node")
+        typer.echo("2. Create config.yaml in the project root with:")
+        typer.echo("   download:")
+        typer.echo("     cookies_from_browser: chrome")
+        typer.echo("   Or use safari if that is where you are logged into YouTube.")
+        raise typer.Exit(code=1)
+    if platform == "youtube" and _looks_like_youtube_ejs_issue(stderr):
+        typer.echo("YouTube download failed: yt-dlp could not solve the current JavaScript challenge.")
+        typer.echo("Recommended next steps:")
+        typer.echo("1. Confirm Node is installed: node -v")
+        typer.echo("2. Upgrade yt-dlp with EJS support: python3 -m pip install -U \"yt-dlp[default]\"")
+        typer.echo("3. Enable remote components in config.yaml:")
+        typer.echo("   download:")
+        typer.echo("     remote_components: ejs:github")
+        typer.echo("4. Keep browser cookies enabled if needed.")
+        raise typer.Exit(code=1)
+
+    detail = stderr or str(error)
+    typer.echo(f"Process failed: {detail}")
+    raise typer.Exit(code=1)
+
+
+def _looks_like_youtube_cookie_issue(stderr: str) -> bool:
+    lowered = stderr.lower()
+    return (
+        "sign in to confirm you’re not a bot" in lowered
+        or "sign in to confirm you're not a bot" in lowered
+        or "--cookies-from-browser" in lowered
+    )
+
+
+def _looks_like_youtube_ejs_issue(stderr: str) -> bool:
+    lowered = stderr.lower()
+    return (
+        "n challenge solving failed" in lowered
+        or "requested format is not available" in lowered
+        or "only images are available for download" in lowered
+    )
 
 
 if __name__ == "__main__":

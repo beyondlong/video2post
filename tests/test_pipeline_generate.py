@@ -22,6 +22,27 @@ class FailingProvider:
         raise RuntimeError("llm unavailable")
 
 
+class FakeCoverDownloader:
+    def __init__(self):
+        self.calls = []
+
+    def download_video(self, url, output_template):
+        self.calls.append((url, output_template))
+        video_path = output_template.with_name("cover-source.mp4")
+        video_path.write_text("video", encoding="utf-8")
+        return video_path
+
+
+class FakeCoverExtractor:
+    def __init__(self):
+        self.calls = []
+
+    def extract_frame(self, source, target, *, at_seconds):
+        self.calls.append((source, target, at_seconds))
+        target.write_text("cover", encoding="utf-8")
+        return target
+
+
 def test_generate_outputs_writes_requested_files_and_updates_metadata(tmp_path):
     metadata = TaskMetadata(
         source_url="https://youtu.be/test",
@@ -33,7 +54,16 @@ def test_generate_outputs_writes_requested_files_and_updates_metadata(tmp_path):
     (tmp_path / "transcript.en.md").write_text("English transcript", encoding="utf-8")
     prompt_dir = tmp_path / "prompts"
     prompt_dir.mkdir()
-    for name in ["translation", "notes", "article", "script", "titles"]:
+    for name in [
+        "translation",
+        "notes",
+        "x_article",
+        "x_thread",
+        "x_titles",
+        "article",
+        "script",
+        "titles",
+    ]:
         (prompt_dir / f"{name}.md").write_text(
             f"{name}: {{{{ video_title }}}}\n{{{{ transcript }}}}",
             encoding="utf-8",
@@ -59,7 +89,7 @@ def test_generate_outputs_writes_requested_files_and_updates_metadata(tmp_path):
         tmp_path / "transcript.zh.md"
     ).read_text(encoding="utf-8")
     loaded = read_metadata(tmp_path / "meta.json")
-    assert loaded.status == TaskStatus.COMPLETED
+    assert loaded.status == TaskStatus.TITLES_GENERATED
     assert loaded.llm_model == "fake-llm"
 
 
@@ -74,7 +104,16 @@ def test_generate_outputs_uses_default_targets(tmp_path):
     (tmp_path / "transcript.en.md").write_text("English transcript", encoding="utf-8")
     prompt_dir = tmp_path / "prompts"
     prompt_dir.mkdir()
-    for name in ["translation", "notes", "article", "script", "titles"]:
+    for name in [
+        "translation",
+        "notes",
+        "x_article",
+        "x_thread",
+        "x_titles",
+        "article",
+        "script",
+        "titles",
+    ]:
         (prompt_dir / f"{name}.md").write_text(name, encoding="utf-8")
 
     outputs = generate_outputs(
@@ -87,6 +126,9 @@ def test_generate_outputs_uses_default_targets(tmp_path):
     assert [path.name for path in outputs] == [
         "transcript.zh.md",
         "notes.md",
+        "x_article.md",
+        "x_thread.md",
+        "x_titles.md",
         "article.md",
         "script.md",
         "titles.md",
@@ -104,7 +146,7 @@ def test_generate_outputs_marks_bilibili_default_run_as_completed(tmp_path):
     (tmp_path / "transcript.zh.md").write_text("中文整理稿", encoding="utf-8")
     prompt_dir = tmp_path / "prompts"
     prompt_dir.mkdir()
-    for name in ["notes", "article", "script", "titles"]:
+    for name in ["notes", "x_article", "x_thread", "x_titles", "article", "script", "titles"]:
         (prompt_dir / f"{name}.md").write_text(name, encoding="utf-8")
 
     outputs = generate_outputs(
@@ -117,6 +159,9 @@ def test_generate_outputs_marks_bilibili_default_run_as_completed(tmp_path):
     loaded = read_metadata(tmp_path / "meta.json")
     assert [path.name for path in outputs] == [
         "notes.md",
+        "x_article.md",
+        "x_thread.md",
+        "x_titles.md",
         "article.md",
         "script.md",
         "titles.md",
@@ -135,18 +180,98 @@ def test_generate_outputs_keeps_partial_status_for_partial_target_run(tmp_path):
     (tmp_path / "transcript.en.md").write_text("English transcript", encoding="utf-8")
     prompt_dir = tmp_path / "prompts"
     prompt_dir.mkdir()
-    (prompt_dir / "titles.md").write_text("titles", encoding="utf-8")
+    (prompt_dir / "x_titles.md").write_text("x_titles", encoding="utf-8")
 
     generate_outputs(
         tmp_path / "meta.json",
         AppConfig(),
         provider=FakeProvider(),
         prompt_dir=prompt_dir,
-        targets=["titles"],
+        targets=["x_titles"],
     )
 
     loaded = read_metadata(tmp_path / "meta.json")
-    assert loaded.status == TaskStatus.TITLES_GENERATED
+    assert loaded.status == TaskStatus.X_TITLES_GENERATED
+
+
+def test_generate_outputs_can_generate_x_targets_explicitly(tmp_path):
+    metadata = TaskMetadata(
+        source_url="https://youtu.be/test",
+        platform="youtube",
+        task_dir=tmp_path,
+        video=VideoMetadata(title="Test Video"),
+    )
+    write_metadata(metadata)
+    (tmp_path / "transcript.en.md").write_text("English transcript", encoding="utf-8")
+    prompt_dir = tmp_path / "prompts"
+    prompt_dir.mkdir()
+    for name in ["x_article", "x_thread", "x_titles"]:
+        (prompt_dir / f"{name}.md").write_text(
+            f"{name}: {{{{ video_title }}}}\n{{{{ transcript }}}}",
+            encoding="utf-8",
+        )
+
+    outputs = generate_outputs(
+        tmp_path / "meta.json",
+        AppConfig(),
+        provider=FakeProvider(),
+        prompt_dir=prompt_dir,
+        targets=["x_article", "x_thread", "x_titles"],
+    )
+
+    assert [path.name for path in outputs] == [
+        "x_article.md",
+        "x_thread.md",
+        "x_titles.md",
+    ]
+
+
+def test_generate_outputs_can_generate_cover_artifacts(tmp_path):
+    metadata = TaskMetadata(
+        source_url="https://youtu.be/test",
+        platform="youtube",
+        task_dir=tmp_path,
+        video=VideoMetadata(title="Test Video", duration_seconds=200),
+    )
+    write_metadata(metadata)
+    downloader = FakeCoverDownloader()
+    extractor = FakeCoverExtractor()
+
+    outputs = generate_outputs(
+        tmp_path / "meta.json",
+        AppConfig(),
+        targets=["cover"],
+        downloader=downloader,
+        cover_extractor=extractor,
+    )
+
+    assert outputs == [tmp_path / "cover.jpg", tmp_path / "cover.meta.json"]
+    assert extractor.calls[0][2] == 40.0
+    loaded = read_metadata(tmp_path / "meta.json")
+    assert loaded.status == TaskStatus.COVER_GENERATED
+    assert not (tmp_path / "cover-source.mp4").exists()
+
+
+def test_generate_outputs_can_use_explicit_cover_time(tmp_path):
+    metadata = TaskMetadata(
+        source_url="https://youtu.be/test",
+        platform="youtube",
+        task_dir=tmp_path,
+        video=VideoMetadata(title="Test Video", duration_seconds=200),
+    )
+    write_metadata(metadata)
+    extractor = FakeCoverExtractor()
+
+    generate_outputs(
+        tmp_path / "meta.json",
+        AppConfig(),
+        targets=["cover"],
+        downloader=FakeCoverDownloader(),
+        cover_extractor=extractor,
+        cover_at="00:00:30",
+    )
+
+    assert extractor.calls[0][2] == 30.0
 
 
 def test_generate_outputs_clears_previous_error_on_success(tmp_path):
@@ -188,6 +313,9 @@ def test_generate_outputs_keeps_completed_when_all_expected_outputs_exist(tmp_pa
     write_metadata(metadata)
     (tmp_path / "transcript.zh.md").write_text("中文整理稿", encoding="utf-8")
     (tmp_path / "notes.md").write_text("notes", encoding="utf-8")
+    (tmp_path / "x_article.md").write_text("x_article", encoding="utf-8")
+    (tmp_path / "x_thread.md").write_text("x_thread", encoding="utf-8")
+    (tmp_path / "x_titles.md").write_text("x_titles", encoding="utf-8")
     (tmp_path / "article.md").write_text("article", encoding="utf-8")
     (tmp_path / "script.md").write_text("script", encoding="utf-8")
     (tmp_path / "titles.md").write_text("titles", encoding="utf-8")
@@ -348,7 +476,16 @@ def test_generate_outputs_skips_translation_by_default_for_bilibili(tmp_path):
     transcript_path.write_text(original_transcript, encoding="utf-8")
     prompt_dir = tmp_path / "prompts"
     prompt_dir.mkdir()
-    for name in ["translation", "notes", "article", "script", "titles"]:
+    for name in [
+        "translation",
+        "notes",
+        "x_article",
+        "x_thread",
+        "x_titles",
+        "article",
+        "script",
+        "titles",
+    ]:
         (prompt_dir / f"{name}.md").write_text(
             f"{name}: {{{{ video_title }}}}\n{{{{ transcript }}}}",
             encoding="utf-8",
@@ -364,12 +501,15 @@ def test_generate_outputs_skips_translation_by_default_for_bilibili(tmp_path):
 
     assert [path.name for path in outputs] == [
         "notes.md",
+        "x_article.md",
+        "x_thread.md",
+        "x_titles.md",
         "article.md",
         "script.md",
         "titles.md",
     ]
     assert transcript_path.read_text(encoding="utf-8") == original_transcript
-    assert len(provider.prompts) == 4
+    assert len(provider.prompts) == 7
     assert all(not prompt.startswith("translation:") for prompt in provider.prompts)
 
 

@@ -16,6 +16,8 @@ class DownloadSettings(BaseModel):
     preferred_audio_format: str = "wav"
     cookies_file: Path | None = None
     cookies_from_browser: str | None = None
+    js_runtimes: str | None = "node"
+    remote_components: str | None = None
 
 
 class AudioSettings(BaseModel):
@@ -46,6 +48,9 @@ class GenerationSettings(BaseModel):
         default_factory=lambda: [
             "translation",
             "notes",
+            "x_article",
+            "x_thread",
+            "x_titles",
             "article",
             "script",
             "titles",
