@@ -22,8 +22,10 @@ audio:
 asr:
   default_language: auto
   english_provider: faster_whisper
+  # For Apple Silicon experiments you can switch to: mlx_whisper
   chinese_provider: funasr
   faster_whisper_model: base
+  mlx_whisper_model: mlx-community/whisper-tiny
   funasr_model: paraformer
 
 llm:
@@ -39,6 +41,9 @@ generation:
   default_targets:
     - translation
     - notes
+    - x_article
+    - x_thread
+    - x_titles
     - article
     - script
     - titles

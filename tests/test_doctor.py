@@ -24,6 +24,7 @@ def test_collect_doctor_checks_reports_required_and_optional_items():
             "httpx",
             "dotenv",
             "faster_whisper",
+            "mlx_whisper",
         }
         return object() if name in available else None
 
@@ -34,6 +35,7 @@ def test_collect_doctor_checks_reports_required_and_optional_items():
     assert checks[1].name == "yt-dlp"
     assert checks[1].status == DoctorStatus.OK
     assert any(check.name == ".env:VIDEO2POST_LLM_API_KEY" and check.status == DoctorStatus.OK for check in checks)
+    assert any(check.name == "python:mlx_whisper" and check.status == DoctorStatus.OK for check in checks)
     assert any(check.name == "python:funasr" and check.status == DoctorStatus.OPTIONAL for check in checks)
 
 

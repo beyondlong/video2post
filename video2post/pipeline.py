@@ -6,6 +6,7 @@ from video2post.audio.ffmpeg import FfmpegAudioNormalizer
 from video2post.audio.ffmpeg import FfmpegVideoFrameExtractor
 from video2post.asr.faster_whisper import FasterWhisperTranscriber
 from video2post.asr.funasr import FunASRTranscriber
+from video2post.asr.mlx_whisper import MlxWhisperTranscriber
 from video2post.config import AppConfig
 from video2post.downloader.ytdlp import YtDlpDownloader
 from video2post.llm.openai_compatible import OpenAICompatibleProvider
@@ -417,4 +418,6 @@ def _derived_generation_status(metadata: TaskMetadata, config: AppConfig) -> Tas
 def _build_transcriber(metadata: TaskMetadata, config: AppConfig) -> object:
     if metadata.platform == "bilibili" and config.asr.chinese_provider == "funasr":
         return FunASRTranscriber(model_name=config.asr.funasr_model)
+    if metadata.platform == "youtube" and config.asr.english_provider == "mlx_whisper":
+        return MlxWhisperTranscriber(model_name=config.asr.mlx_whisper_model)
     return FasterWhisperTranscriber(model_name=config.asr.faster_whisper_model)

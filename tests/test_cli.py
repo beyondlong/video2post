@@ -43,6 +43,12 @@ def test_doctor_command_reports_results(monkeypatch):
         lambda: [
             DoctorCheck(name="ffmpeg", status=DoctorStatus.OK, detail="/opt/homebrew/bin/ffmpeg"),
             DoctorCheck(
+                name="python:mlx_whisper",
+                status=DoctorStatus.OK,
+                detail="mlx-whisper importable",
+                required=False,
+            ),
+            DoctorCheck(
                 name="python:funasr",
                 status=DoctorStatus.OPTIONAL,
                 detail="funasr not installed",
@@ -55,6 +61,7 @@ def test_doctor_command_reports_results(monkeypatch):
 
     assert result.exit_code == 0
     assert "[OK] ffmpeg" in result.output
+    assert "[OK] python:mlx_whisper" in result.output
     assert "[OPTIONAL] python:funasr" in result.output
     assert "Doctor summary: required dependencies look ready." in result.output
 

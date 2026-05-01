@@ -46,6 +46,7 @@ def collect_doctor_checks(
         _package_check("httpx", finder=finder),
         _package_check("dotenv", label="python-dotenv", finder=finder),
         _package_check("faster_whisper", required=False, finder=finder),
+        _package_check("mlx_whisper", required=False, finder=finder),
         _package_check("funasr", required=False, finder=finder),
     ]
     return checks

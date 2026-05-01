@@ -30,6 +30,7 @@ class AsrSettings(BaseModel):
     english_provider: str = "faster_whisper"
     chinese_provider: str = "funasr"
     faster_whisper_model: str = "base"
+    mlx_whisper_model: str = "mlx-community/whisper-tiny"
     funasr_model: str = "paraformer"
 
 

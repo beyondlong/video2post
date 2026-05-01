@@ -26,6 +26,12 @@ python3 -m pip install -e '.[dev]'
 python3 -m pip install -e '.[asr]'
 ```
 
+如果你想在 Apple Silicon 上实验更快的英文本地转写，也可以安装：
+
+```bash
+python3 -m pip install -e '.[asr-mlx]'
+```
+
 3. 配置 `.env`
 
 ```bash
@@ -118,6 +124,14 @@ llm:
   retry_attempts: 2
 ```
 
+如果你想切到 `mlx-whisper`：
+
+```yaml
+asr:
+  english_provider: mlx_whisper
+  mlx_whisper_model: mlx-community/whisper-tiny
+```
+
 ## 处理流程
 
 ```text
@@ -183,6 +197,7 @@ outputs/
 - yt-dlp
 - ffmpeg
 - faster-whisper
+- mlx-whisper
 - FunASR
 - 云端大模型 API
 - Markdown 文件输出
@@ -196,6 +211,7 @@ outputs/
 - Prompt 模板管理：将翻译、笔记、长文、口播稿和标题模板独立维护。
 - 长视频分块处理：转写结果按 segment 保存，LLM 阶段分块总结再汇总生成。
 - 默认英文 ASR 当前使用 `faster-whisper base`，优先兼顾本地自测速度和基础质量。
+- Apple Silicon 本地实验链路已支持 `mlx-whisper`，适合继续对比更快的英文转写体验。
 
 第一版 MVP 验收重点：
 

@@ -15,6 +15,10 @@
 
 - `faster-whisper`
 
+如果你想在 Apple Silicon 上实验更快的英文转写，还可以安装：
+
+- `mlx-whisper`
+
 如果要实验 `FunASR` 中文 ASR，还需要额外安装：
 
 - `funasr`
@@ -44,6 +48,12 @@ yt-dlp --version
 ```bash
 python3 -m pip install -e '.[dev]'
 python3 -m pip install -e '.[asr]'
+```
+
+如果你要实验 `mlx-whisper`：
+
+```bash
+python3 -m pip install -e '.[asr-mlx]'
 ```
 
 如果你需要实验 `FunASR`：
@@ -78,6 +88,14 @@ llm:
 ```yaml
 asr:
   faster_whisper_model: base
+```
+
+如果你想切到 `mlx-whisper`，可补：
+
+```yaml
+asr:
+  english_provider: mlx_whisper
+  mlx_whisper_model: mlx-community/whisper-tiny
 ```
 
 如果某些 YouTube 视频提示需要登录或确认不是机器人，建议在 `config.yaml` 里再补：
