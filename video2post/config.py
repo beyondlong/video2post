@@ -29,7 +29,7 @@ class AsrSettings(BaseModel):
     default_language: str = "auto"
     english_provider: str = "faster_whisper"
     chinese_provider: str = "funasr"
-    faster_whisper_model: str = "medium"
+    faster_whisper_model: str = "base"
     funasr_model: str = "paraformer"
 
 

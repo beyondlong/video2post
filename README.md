@@ -195,6 +195,7 @@ outputs/
 - LLM Provider 抽象：优先支持 OpenAI-compatible API，后续可扩展其他云端模型或本地模型。
 - Prompt 模板管理：将翻译、笔记、长文、口播稿和标题模板独立维护。
 - 长视频分块处理：转写结果按 segment 保存，LLM 阶段分块总结再汇总生成。
+- 默认英文 ASR 当前使用 `faster-whisper base`，优先兼顾本地自测速度和基础质量。
 
 第一版 MVP 验收重点：
 

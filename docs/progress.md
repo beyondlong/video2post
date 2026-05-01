@@ -177,6 +177,7 @@ video2post process URL --keep-source
 - 输出段落版 `transcript.en.md`。
 - 额外输出 `transcript.segments.json`，保留原始 `start/end/text/language`。
 - 支持跳过已存在转写文件。
+- 当前默认英文 ASR 模型已调整为 `faster-whisper base`，优先改善本地自测速度。
 
 当前统一 segment 结构：
 

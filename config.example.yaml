@@ -23,7 +23,7 @@ asr:
   default_language: auto
   english_provider: faster_whisper
   chinese_provider: funasr
-  faster_whisper_model: medium
+  faster_whisper_model: base
   funasr_model: paraformer
 
 llm:

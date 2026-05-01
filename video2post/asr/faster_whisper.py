@@ -9,7 +9,7 @@ class FasterWhisperTranscriber:
         self,
         *,
         model: Any | None = None,
-        model_name: str = "medium",
+        model_name: str = "base",
         device: str = "auto",
         compute_type: str = "default",
     ) -> None:

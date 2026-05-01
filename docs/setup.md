@@ -73,6 +73,13 @@ llm:
   retry_attempts: 2
 ```
 
+如果你想显式指定当前推荐的较快英文转写模型，也可以补：
+
+```yaml
+asr:
+  faster_whisper_model: base
+```
+
 如果某些 YouTube 视频提示需要登录或确认不是机器人，建议在 `config.yaml` 里再补：
 
 ```yaml
