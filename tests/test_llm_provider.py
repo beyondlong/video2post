@@ -1,6 +1,7 @@
 import json
 
 import httpx
+from pathlib import Path
 
 from video2post.config import LlmSettings
 from video2post.llm.openai_compatible import OpenAICompatibleProvider
@@ -166,6 +167,7 @@ def test_openai_compatible_provider_requires_api_key(monkeypatch):
     monkeypatch.delenv("VIDEO2POST_LLM_BASE_URL", raising=False)
     monkeypatch.delenv("VIDEO2POST_LLM_MODEL", raising=False)
     monkeypatch.chdir("/")
+    monkeypatch.setattr("video2post.env._dotenv_paths", lambda: [])
     provider = OpenAICompatibleProvider(
         settings=LlmSettings(base_url="https://llm.example.com/v1", model="test-model")
     )
@@ -176,6 +178,44 @@ def test_openai_compatible_provider_requires_api_key(monkeypatch):
         assert "VIDEO2POST_LLM_API_KEY" in str(error)
     else:
         raise AssertionError("Expected missing API key error")
+
+
+def test_openai_compatible_provider_loads_project_dotenv_from_other_working_directory(
+    tmp_path, monkeypatch
+):
+    monkeypatch.delenv("VIDEO2POST_LLM_API_KEY", raising=False)
+    monkeypatch.delenv("VIDEO2POST_LLM_BASE_URL", raising=False)
+    monkeypatch.delenv("VIDEO2POST_LLM_MODEL", raising=False)
+    work_dir = tmp_path / "work"
+    work_dir.mkdir()
+    project_env = tmp_path / "project.env"
+    project_env.write_text(
+        "\n".join(
+            [
+                "VIDEO2POST_LLM_API_KEY=project-key",
+                "VIDEO2POST_LLM_BASE_URL=https://project.example.com/v1",
+                "VIDEO2POST_LLM_MODEL=project-model",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(work_dir)
+    monkeypatch.setattr(
+        "video2post.env._dotenv_paths",
+        lambda: [Path(".env"), project_env],
+        raising=False,
+    )
+    client = FakeHttpClient()
+    provider = OpenAICompatibleProvider(settings=LlmSettings(), http_client=client)
+
+    result = provider.generate("Hello")
+
+    assert result == "Generated content"
+    request = client.requests[0]
+    assert request["url"] == "https://project.example.com/v1/chat/completions"
+    assert request["headers"]["Authorization"] == "Bearer project-key"
+    assert request["json"]["model"] == "project-model"
+    assert provider.model_name == "project-model"
 
 
 def test_openai_compatible_provider_loads_dotenv_fallbacks(tmp_path, monkeypatch):

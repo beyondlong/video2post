@@ -29,3 +29,25 @@ def test_prompt_renderer_leaves_unknown_variables_empty(tmp_path):
     renderer = PromptRenderer(prompt_dir)
 
     assert renderer.render("notes", {}) == ""
+
+
+def test_prompt_renderer_falls_back_to_repo_prompts_from_other_working_directory(
+    tmp_path, monkeypatch
+):
+    monkeypatch.chdir(tmp_path)
+
+    renderer = PromptRenderer("prompts")
+
+    rendered = renderer.render(
+        "chunk_summary",
+        {
+            "video_title": "Codex Demo",
+            "platform": "youtube",
+            "source_url": "https://youtu.be/test",
+            "chunk_index": 1,
+            "chunk_count": 2,
+            "transcript_chunk": "hello world",
+        },
+    )
+
+    assert "hello world" in rendered

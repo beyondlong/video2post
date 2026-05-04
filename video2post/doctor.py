@@ -7,7 +7,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from enum import StrEnum
 
-from dotenv import load_dotenv
+from video2post.env import load_video2post_dotenv
 
 
 class DoctorStatus(StrEnum):
@@ -31,7 +31,7 @@ def collect_doctor_checks(
     finder: Callable[[str], object | None] = importlib.util.find_spec,
 ) -> list[DoctorCheck]:
     if env is None:
-        load_dotenv(".env", override=False)
+        load_video2post_dotenv()
         env = dict(os.environ)
 
     checks = [

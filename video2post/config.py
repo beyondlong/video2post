@@ -1,4 +1,5 @@
 from pathlib import Path
+import platform
 from typing import Any
 
 import yaml
@@ -25,12 +26,24 @@ class AudioSettings(BaseModel):
     channels: int = 1
 
 
+def _runtime_os() -> str:
+    return platform.system().lower()
+
+
+def _default_english_provider() -> str:
+    return "mlx_whisper" if _runtime_os() == "darwin" else "faster_whisper"
+
+
+def _default_mlx_whisper_model() -> str:
+    return "mlx-community/whisper-base.en-mlx"
+
+
 class AsrSettings(BaseModel):
     default_language: str = "auto"
-    english_provider: str = "faster_whisper"
+    english_provider: str = Field(default_factory=_default_english_provider)
     chinese_provider: str = "funasr"
     faster_whisper_model: str = "base"
-    mlx_whisper_model: str = "mlx-community/whisper-tiny"
+    mlx_whisper_model: str = Field(default_factory=_default_mlx_whisper_model)
     funasr_model: str = "paraformer"
 
 

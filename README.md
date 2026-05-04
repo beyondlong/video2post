@@ -129,7 +129,7 @@ llm:
 ```yaml
 asr:
   english_provider: mlx_whisper
-  mlx_whisper_model: mlx-community/whisper-tiny
+  mlx_whisper_model: mlx-community/whisper-base.en-mlx
 ```
 
 ## 处理流程
@@ -210,8 +210,8 @@ outputs/
 - LLM Provider 抽象：优先支持 OpenAI-compatible API，后续可扩展其他云端模型或本地模型。
 - Prompt 模板管理：将翻译、笔记、长文、口播稿和标题模板独立维护。
 - 长视频分块处理：转写结果按 segment 保存，LLM 阶段分块总结再汇总生成。
-- 默认英文 ASR 当前使用 `faster-whisper base`，优先兼顾本地自测速度和基础质量。
-- Apple Silicon 本地实验链路已支持 `mlx-whisper`，适合继续对比更快的英文转写体验。
+- macOS 默认英文 ASR 当前使用 `mlx-whisper` + `mlx-community/whisper-base.en-mlx`。
+- 其他系统默认仍使用 `faster-whisper base`。
 
 第一版 MVP 验收重点：
 

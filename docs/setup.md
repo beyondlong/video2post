@@ -83,7 +83,7 @@ llm:
   retry_attempts: 2
 ```
 
-如果你想显式指定当前推荐的较快英文转写模型，也可以补：
+如果你想显式指定非 macOS 环境下当前推荐的英文转写模型，也可以补：
 
 ```yaml
 asr:
@@ -95,7 +95,15 @@ asr:
 ```yaml
 asr:
   english_provider: mlx_whisper
-  mlx_whisper_model: mlx-community/whisper-tiny
+  mlx_whisper_model: mlx-community/whisper-base.en-mlx
+```
+
+当前 macOS 默认就会优先使用：
+
+```yaml
+asr:
+  english_provider: mlx_whisper
+  mlx_whisper_model: mlx-community/whisper-base.en-mlx
 ```
 
 如果某些 YouTube 视频提示需要登录或确认不是机器人，建议在 `config.yaml` 里再补：

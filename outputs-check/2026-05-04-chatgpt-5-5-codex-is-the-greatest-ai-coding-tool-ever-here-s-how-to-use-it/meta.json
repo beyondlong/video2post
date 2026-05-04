@@ -1,0 +1,17 @@
+{
+  "source_url": "https://youtu.be/iz3_xhi6iQE",
+  "platform": "youtube",
+  "task_dir": "outputs-check/2026-05-04-chatgpt-5-5-codex-is-the-greatest-ai-coding-tool-ever-here-s-how-to-use-it",
+  "status": "titles_generated",
+  "video": {
+    "title": "ChatGPT 5.5 Codex is the greatest AI coding tool ever. Here's how to use it",
+    "author": "Alex Finn",
+    "duration_seconds": 1430,
+    "published_at": "20260430"
+  },
+  "created_at": "2026-05-04T20:15:41.233036",
+  "updated_at": "2026-05-04T20:17:14.844991",
+  "asr_model": null,
+  "llm_model": "MiniMax-M2.7",
+  "error": null
+}

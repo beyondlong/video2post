@@ -2,9 +2,8 @@ import os
 from typing import Any
 
 import httpx
-from dotenv import load_dotenv
-
 from video2post.config import LlmSettings
+from video2post.env import load_video2post_dotenv
 from video2post.llm.cleaning import clean_llm_output
 
 
@@ -15,7 +14,7 @@ class OpenAICompatibleProvider:
         settings: LlmSettings,
         http_client: Any | None = None,
     ) -> None:
-        load_dotenv(".env", override=False)
+        load_video2post_dotenv()
         self.settings = settings
         self.model_name = settings.model or os.getenv("VIDEO2POST_LLM_MODEL") or ""
         self._http_client = http_client or httpx.Client()

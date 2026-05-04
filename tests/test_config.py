@@ -3,13 +3,25 @@ from pathlib import Path
 from video2post.config import AppConfig, load_config
 
 
-def test_default_config_uses_outputs_directory():
+def test_default_config_uses_outputs_directory(monkeypatch):
+    monkeypatch.setattr("video2post.config._runtime_os", lambda: "linux")
     config = AppConfig()
 
     assert config.app.output_dir == Path("outputs")
     assert config.app.keep_audio is True
     assert config.app.skip_existing is True
     assert config.app.cleanup_source is False
+    assert config.asr.english_provider == "faster_whisper"
+    assert config.asr.mlx_whisper_model == "mlx-community/whisper-base.en-mlx"
+
+
+def test_default_config_uses_mlx_whisper_on_macos(monkeypatch):
+    monkeypatch.setattr("video2post.config._runtime_os", lambda: "darwin")
+
+    config = AppConfig()
+
+    assert config.asr.english_provider == "mlx_whisper"
+    assert config.asr.mlx_whisper_model == "mlx-community/whisper-base.en-mlx"
 
 
 def test_load_config_merges_yaml_values(tmp_path):

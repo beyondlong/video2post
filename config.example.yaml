@@ -21,11 +21,12 @@ audio:
 
 asr:
   default_language: auto
-  english_provider: faster_whisper
-  # For Apple Silicon experiments you can switch to: mlx_whisper
+  # On macOS, the runtime default is mlx_whisper for faster English YouTube transcription.
+  # On other systems, the runtime default remains faster_whisper.
+  english_provider: mlx_whisper
   chinese_provider: funasr
   faster_whisper_model: base
-  mlx_whisper_model: mlx-community/whisper-tiny
+  mlx_whisper_model: mlx-community/whisper-base.en-mlx
   funasr_model: paraformer
 
 llm:
