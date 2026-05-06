@@ -370,3 +370,29 @@ segments:
 - [需求文档](docs/requirements.md)
 - [开发计划](docs/development-plan.md)
 - [安装与运行](docs/setup.md)
+
+### 发布格式转换
+
+将任意 Markdown 文件转换为公众号和 X 长文发布格式：
+
+```bash
+video2post format article.md --platform wechat,x
+video2post format article.md --platform wechat --output ./publish-ready
+```
+
+也可以转换已有 task 目录中的产物：
+
+```bash
+video2post format-task ./outputs/2026-... --source article --platform wechat,x
+```
+
+生成文件包括：
+
+```text
+*.wechat.md
+*.wechat.html
+*.x.md
+*.x.txt
+```
+
+默认只做确定性格式转换，不调用 LLM。需要平台化改写时显式使用 `--rewrite`。
