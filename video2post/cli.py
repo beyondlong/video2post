@@ -9,6 +9,8 @@ from video2post.config import config_to_dict, load_config
 from video2post.doctor import DoctorStatus, collect_doctor_checks
 from video2post.downloader.ytdlp import detect_platform
 from video2post.downloader.ytdlp import YtDlpDownloader
+from video2post.formatters.models import parse_platforms
+from video2post.formatters.service import format_markdown_file, format_task_artifacts
 from video2post.models import TaskMetadata, VideoMetadata
 from video2post.pipeline import (
     generate_outputs,
@@ -229,6 +231,79 @@ def retry(
 
     if not did_work:
         typer.echo("Nothing to retry.")
+
+
+@app.command("format")
+def format_command(
+    input_path: Annotated[Path, typer.Argument(help="Markdown file to format.")],
+    platform: Annotated[
+        str,
+        typer.Option("--platform", help="Comma-separated platforms: wechat,x."),
+    ] = "wechat,x",
+    output: Annotated[
+        Path | None,
+        typer.Option("--output", "-o", help="Output directory."),
+    ] = None,
+    rewrite: Annotated[
+        bool,
+        typer.Option(
+            "--rewrite",
+            help="Rewrite content with the configured LLM before formatting.",
+        ),
+    ] = False,
+) -> None:
+    """Format a Markdown file for publishing platforms."""
+    try:
+        platforms = parse_platforms(platform)
+        result = format_markdown_file(
+            input_path,
+            platforms=platforms,
+            output_dir=output,
+            rewrite=rewrite,
+        )
+    except ValueError as error:
+        typer.echo(str(error))
+        raise typer.Exit(code=1) from error
+    _echo_generated_paths(result.paths)
+
+
+@app.command("format-task")
+def format_task_command(
+    task_dir: Annotated[Path, typer.Argument(help="Existing video2post task directory.")],
+    source: Annotated[
+        str | None,
+        typer.Option("--source", help="Task artifact source: article,x_article,notes,transcript."),
+    ] = None,
+    platform: Annotated[
+        str,
+        typer.Option("--platform", help="Comma-separated platforms: wechat,x."),
+    ] = "wechat,x",
+    output: Annotated[
+        Path | None,
+        typer.Option("--output", "-o", help="Output directory."),
+    ] = None,
+    rewrite: Annotated[
+        bool,
+        typer.Option(
+            "--rewrite",
+            help="Rewrite content with the configured LLM before formatting.",
+        ),
+    ] = False,
+) -> None:
+    """Format existing task artifacts for publishing platforms."""
+    try:
+        platforms = parse_platforms(platform)
+        result = format_task_artifacts(
+            task_dir,
+            platforms=platforms,
+            source=source,
+            output_dir=output,
+            rewrite=rewrite,
+        )
+    except (ValueError, FileNotFoundError) as error:
+        typer.echo(str(error))
+        raise typer.Exit(code=1) from error
+    _echo_generated_paths(result.paths)
 
 
 @app.command("tasks")

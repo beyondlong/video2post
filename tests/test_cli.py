@@ -676,3 +676,41 @@ def _write_task_metadata(
         video=VideoMetadata(title="Test Video"),
     )
     return write_metadata(metadata)
+
+
+def test_format_command_writes_selected_platform_outputs(tmp_path):
+    input_path = tmp_path / "article.md"
+    input_path.write_text("# Title", encoding="utf-8")
+
+    result = runner.invoke(
+        app,
+        ["format", str(input_path), "--platform", "x"],
+    )
+
+    assert result.exit_code == 0
+    assert "Generated:" in result.output
+    assert (tmp_path / "article.x.md").exists()
+    assert (tmp_path / "article.x.txt").exists()
+
+
+def test_format_command_rejects_unknown_platform(tmp_path):
+    input_path = tmp_path / "article.md"
+    input_path.write_text("# Title", encoding="utf-8")
+
+    result = runner.invoke(app, ["format", str(input_path), "--platform", "weibo"])
+
+    assert result.exit_code != 0
+    assert "Unsupported platform" in result.output
+
+
+def test_format_task_command_uses_existing_artifacts(tmp_path):
+    task_dir = tmp_path / "task"
+    task_dir.mkdir()
+    (task_dir / "meta.json").write_text("{}", encoding="utf-8")
+    (task_dir / "article.md").write_text("# Article", encoding="utf-8")
+
+    result = runner.invoke(app, ["format-task", str(task_dir), "--platform", "wechat"])
+
+    assert result.exit_code == 0
+    assert (task_dir / "article.wechat.md").exists()
+    assert (task_dir / "article.wechat.html").exists()
