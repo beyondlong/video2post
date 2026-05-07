@@ -50,6 +50,7 @@ class TaskMetadata(BaseModel):
     task_dir: Path
     status: TaskStatus = TaskStatus.CREATED
     video: VideoMetadata = Field(default_factory=VideoMetadata)
+    source_language: str | None = None
     created_at: datetime = Field(default_factory=datetime.now)
     updated_at: datetime = Field(default_factory=datetime.now)
     asr_model: str | None = None

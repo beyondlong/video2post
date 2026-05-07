@@ -12,6 +12,7 @@ def test_default_config_uses_outputs_directory(monkeypatch):
     assert config.app.skip_existing is True
     assert config.app.cleanup_source is False
     assert config.asr.english_provider == "faster_whisper"
+    assert config.asr.chinese_provider == "faster_whisper"
     assert config.asr.mlx_whisper_model == "mlx-community/whisper-base.en-mlx"
 
 
@@ -21,6 +22,7 @@ def test_default_config_uses_mlx_whisper_on_macos(monkeypatch):
     config = AppConfig()
 
     assert config.asr.english_provider == "mlx_whisper"
+    assert config.asr.chinese_provider == "faster_whisper"
     assert config.asr.mlx_whisper_model == "mlx-community/whisper-base.en-mlx"
 
 

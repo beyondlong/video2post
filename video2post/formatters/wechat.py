@@ -134,19 +134,20 @@ def _render_html_block(block: MarkdownBlock, collector: LinkCollector) -> str:
             f'{collector.render_wechat_html(block.text)}</p>'
         )
     if block.kind == "blockquote":
-        return _render_note_card("提示", block.text)
+        label, text = _split_note_label(block.text)
+        return _render_note_card(label, text)
     if block.kind == "unordered_list":
         items = "".join(
             f'<li style="margin: 0.38em 0; padding-left: 0.1em;">{collector.render_wechat_html(item)}</li>'
             for item in block.items
         )
-        return f'<ul style="margin: 0 0 1.15em 1.25em; padding: 0;">{items}</ul>'
+        return f'<ul style="margin: 0 0 1.1em 1.2em; padding: 0; color: {_THEME["muted_text"]};">{items}</ul>'
     if block.kind == "ordered_list":
         items = "".join(
             f'<li style="margin: 0.38em 0; padding-left: 0.1em;">{collector.render_wechat_html(item)}</li>'
             for item in block.items
         )
-        return f'<ol style="margin: 0 0 1.15em 1.25em; padding: 0;">{items}</ol>'
+        return f'<ol style="margin: 0 0 1.1em 1.2em; padding: 0; color: {_THEME["muted_text"]};">{items}</ol>'
     if block.kind == "table":
         return _render_table(block, collector)
     if block.kind == "code_block":
@@ -172,6 +173,13 @@ def _card_label(text: str) -> str:
         return "要点"
     return "说明"
 
+
+
+def _split_note_label(text: str) -> tuple[str, str]:
+    match = re.match(r"^(说明|要点|清单)[:：]\s*(.+)$", text.strip(), flags=re.S)
+    if match:
+        return match.group(1), match.group(2)
+    return "提示", text
 
 def _render_note_card(label: str, text: str) -> str:
     lines = [line for line in text.splitlines() if line.strip()]

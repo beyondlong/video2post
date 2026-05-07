@@ -165,6 +165,10 @@ outputs/
     x_article.md
     x_thread.md
     x_titles.md
+    article.wechat.md
+    article.wechat.html
+    x_article.x.md
+    x_article.x.txt
     cover.jpg
     cover.meta.json
     article.md
@@ -444,25 +448,31 @@ video2post config show
 
 ### 8.6 中文 ASR
 
-推荐：
+当前 MVP 默认：
 
-- `FunASR`
+- `faster-whisper`
 
 用途：
 
-- B 站中文技术视频转写。
+- B 站中文技术视频转写的默认兜底链路。
 
-优势：
+原因：
 
-- 中文识别能力较好。
-- 支持 VAD、标点恢复等能力。
-- 更适合中文视频场景。
+- 和现有英文 ASR 链路共用同一套依赖。
+- 启动和安装成本更低，更适合当前个人自用 MVP。
+- 已有真实验收显示 `FunASR` 在当前 macOS 环境下冷启动和长音频推理偏重，不适合作为默认中文 ASR。
+
+实验性选项：
+
+- `FunASR` 仍保留为可显式配置的中文 ASR provider。
+- 如果后续独立优化启动、缓存和长音频表现，可以重新评估是否作为默认方案。
 
 第一版实施建议：
 
 - 可以先预留统一 ASR 接口。
 - 优先跑通 `faster-whisper + YouTube`。
-- 再接入 `FunASR + B 站`。
+- B 站默认复用 `faster-whisper` 中文识别链路。
+- `FunASR + B 站` 作为实验性路线继续验证。
 - 不要求一开始就把所有 ASR 能力做完整。
 
 统一 ASR 接口应屏蔽不同模型差异，向 pipeline 输出统一结构，例如：
@@ -966,7 +976,7 @@ audio:
 asr:
   default_language: auto
   english_provider: faster_whisper
-  chinese_provider: funasr
+  chinese_provider: faster_whisper
   faster_whisper_model: base
   funasr_model: paraformer
 

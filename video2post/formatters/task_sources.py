@@ -38,7 +38,7 @@ def _source_candidates(source: str | None, platform: Platform) -> list[str]:
             raise ValueError(f"Unsupported task source: {source}")
         return [source]
     if platform == Platform.WECHAT:
-        return ["article"]
+        return ["article", "x_article"]
     if platform == Platform.X:
         return ["x_article", "article"]
     return ["article"]

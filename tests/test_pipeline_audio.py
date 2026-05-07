@@ -102,7 +102,7 @@ def test_prepare_audio_records_failure(tmp_path):
     loaded = read_metadata(tmp_path / "meta.json")
     assert loaded.status == TaskStatus.FAILED
     assert loaded.error is not None
-    assert loaded.error.stage == TaskStatus.AUDIO_DOWNLOADED.value
+    assert loaded.error.stage == "audio_download"
     assert loaded.error.retryable is True
 
 

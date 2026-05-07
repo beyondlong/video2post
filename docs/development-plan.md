@@ -234,7 +234,7 @@ x_titles.md
 
 目标：让 30-90 分钟技术视频也能稳定处理。
 
-当前状态：已开始实现基础分块链路。超过 `generation.chunk_max_chars` 的转写稿会输出 `chunks/` 和 `summaries/`，最终生成阶段会使用 chunk 摘要代替完整转写稿。
+当前状态：已实现 segment 优先的分块链路。超过 `generation.chunk_max_chars` 的转写稿会优先读取 `transcript.segments.json`，按 ASR segment 累积输出带时间范围的 `chunks/`；没有 segment 文件时回退到段落切块。系统会生成局部摘要到 `summaries/`，并在存在 `global_summary.md` 模板时生成 `summaries/global.summary.md` 供最终生成阶段使用。
 
 主要任务：
 
@@ -242,7 +242,7 @@ x_titles.md
 - 输出 `chunks/chunk-001.md` 等中间文件。
 - 对每个 chunk 生成局部摘要。
 - 输出 `summaries/chunk-001.summary.md` 等中间文件。
-- 基于局部摘要生成全局笔记。
+- 基于局部摘要生成全局摘要。
 - 再生成长文、口播稿和标题。
 
 验收标准：

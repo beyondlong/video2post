@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from video2post.formatters.models import FormatRequest, Platform, parse_platforms
+from video2post.formatters.service import format_markdown_file, format_task_artifacts
 
 
 def test_parse_platforms_accepts_comma_separated_values():
@@ -25,9 +26,6 @@ def test_format_request_defaults_output_dir_to_input_parent(tmp_path):
     assert request.output_dir == tmp_path
 
 
-from video2post.formatters.service import format_markdown_file
-
-
 def test_format_markdown_file_writes_all_selected_outputs(tmp_path):
     input_path = tmp_path / "article.md"
     input_path.write_text("# Title\n\nRead [OpenAI](https://openai.com).", encoding="utf-8")
@@ -40,8 +38,9 @@ def test_format_markdown_file_writes_all_selected_outputs(tmp_path):
         "article.x.md",
         "article.x.txt",
     ]
+    assert "## 引用链接" in (tmp_path / "article.wechat.md").read_text(encoding="utf-8")
     assert (tmp_path / "article.wechat.html").exists()
-    assert (tmp_path / "article.x.txt").exists()
+    assert "OpenAI: https://openai.com" in (tmp_path / "article.x.txt").read_text(encoding="utf-8")
 
 
 def test_format_markdown_file_uses_output_dir(tmp_path):
@@ -52,9 +51,6 @@ def test_format_markdown_file_uses_output_dir(tmp_path):
     result = format_markdown_file(input_path, platforms=[Platform.X], output_dir=output_dir)
 
     assert result.paths == [output_dir / "article.x.md", output_dir / "article.x.txt"]
-
-
-from video2post.formatters.service import format_task_artifacts
 
 
 def test_format_task_artifacts_uses_platform_default_sources(tmp_path):
@@ -69,6 +65,18 @@ def test_format_task_artifacts_uses_platform_default_sources(tmp_path):
         "article.wechat.md",
         "x_article.x.md",
         "x_article.x.txt",
+    ]
+
+
+def test_format_task_artifacts_falls_back_to_x_article_for_wechat(tmp_path):
+    (tmp_path / "meta.json").write_text("{}", encoding="utf-8")
+    (tmp_path / "x_article.md").write_text("# X 稿", encoding="utf-8")
+
+    result = format_task_artifacts(tmp_path, platforms=[Platform.WECHAT])
+
+    assert [path.name for path in result.paths] == [
+        "x_article.wechat.md",
+        "x_article.wechat.html",
     ]
 
 
@@ -96,3 +104,23 @@ def test_format_markdown_file_rewrites_when_requested(tmp_path, monkeypatch):
     format_markdown_file(input_path, platforms=[Platform.X], rewrite=True)
 
     assert (tmp_path / "article.x.md").read_text(encoding="utf-8").startswith("# Rewritten")
+
+
+def test_wechat_html_uses_warm_public_account_theme(tmp_path):
+    input_path = tmp_path / "article.md"
+    input_path.write_text(
+        "# 主标题\n\n## 小节\n\n正文包含 `code`。\n\n---\n\n1. 第一项\n2. 第二项\n\n> 说明：重点内容",
+        encoding="utf-8",
+    )
+
+    format_markdown_file(input_path, platforms=[Platform.WECHAT])
+
+    html = (tmp_path / "article.wechat.html").read_text(encoding="utf-8")
+    assert "font-size: 16px; line-height: 1.82; color: #2f2a24;" in html
+    assert "font-family: -apple-system, BlinkMacSystemFont" in html
+    assert "border-bottom: 1px solid #eadfce" in html
+    assert "background: #fbf7ef; border-left: 4px solid #b86b2b" in html
+    assert '<hr style="border: 0; border-top: 1px dashed #eadfce; margin: 1.8em 0;" />' in html
+    assert '<ol style="margin: 0 0 1.1em 1.2em; padding: 0; color: #6f6254;">' in html
+    assert '<code style="background: #f7f1e7;' in html
+    assert '<p style="margin: 0 0 0.55em; font-size: 13px; font-weight: 700; color: #8f4f1f;">说明</p>' in html

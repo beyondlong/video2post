@@ -11,7 +11,7 @@ from video2post.downloader.ytdlp import detect_platform
 from video2post.downloader.ytdlp import YtDlpDownloader
 from video2post.formatters.models import parse_platforms
 from video2post.formatters.service import format_markdown_file, format_task_artifacts
-from video2post.models import TaskMetadata, VideoMetadata
+from video2post.models import TaskMetadata, TaskStatus, VideoMetadata
 from video2post.pipeline import (
     generate_outputs,
     prepare_audio,
@@ -47,6 +47,10 @@ def process(
         Path | None,
         typer.Option("--output", "-o", help="Override configured output directory."),
     ] = None,
+    lang: Annotated[
+        str,
+        typer.Option("--lang", help="Source language: auto, en, or zh."),
+    ] = "auto",
     download: Annotated[
         bool,
         typer.Option(
@@ -58,7 +62,7 @@ def process(
         bool,
         typer.Option(
             "--transcribe/--no-transcribe",
-            help="Run English ASR after audio preparation.",
+            help="Run ASR after audio preparation.",
         ),
     ] = True,
     generate: Annotated[
@@ -95,6 +99,7 @@ def process(
     if cleanup_source is not None:
         loaded_config.app.cleanup_source = cleanup_source
     output_dir = output or loaded_config.app.output_dir
+    source_language = _normalize_source_language(lang)
     platform = detect_platform(url)
     video_metadata = (
         fetch_initial_video_metadata(url, config=loaded_config) or VideoMetadata(title="untitled")
@@ -106,6 +111,14 @@ def process(
         title=video_metadata.title or "untitled",
     )
     metadata.video = video_metadata
+    metadata.source_language = source_language
+    if (
+        video_metadata.title
+        or video_metadata.author
+        or video_metadata.duration_seconds
+        or video_metadata.published_at
+    ):
+        metadata.status = TaskStatus.METADATA_FETCHED
     write_metadata(metadata)
     typer.echo(f"Task directory: {metadata.task_dir}")
     typer.echo(f"Platform: {platform}")
@@ -127,6 +140,7 @@ def process(
                         loaded_config,
                         targets=selected_targets,
                         cover_at=cover_at,
+                        progress_callback=_echo_progress,
                     )
                     for generated_path in generated_paths:
                         typer.echo(f"Generated: {generated_path}")
@@ -168,6 +182,7 @@ def generate_command(
         loaded_config,
         targets=_parse_targets(targets),
         cover_at=cover_at,
+        progress_callback=_echo_progress,
     )
     _echo_generated_paths(generated_paths)
 
@@ -225,6 +240,7 @@ def retry(
             loaded_config,
             targets=_parse_targets(targets),
             cover_at=cover_at,
+            progress_callback=_echo_progress,
         )
         _echo_generated_paths(generated_paths)
         did_work = True
@@ -372,6 +388,15 @@ def show_config(
     typer.echo(json.dumps(config_to_dict(loaded_config), indent=2, ensure_ascii=False))
 
 
+def _normalize_source_language(value: str) -> str | None:
+    normalized = value.strip().lower()
+    if normalized == "auto":
+        return None
+    if normalized in {"en", "zh"}:
+        return normalized
+    raise typer.BadParameter("--lang must be auto, en, or zh.")
+
+
 def _parse_targets(raw_targets: str | None) -> list[str] | None:
     if not raw_targets:
         return None
@@ -379,7 +404,7 @@ def _parse_targets(raw_targets: str | None) -> list[str] | None:
 
 
 def _expected_transcript_path(metadata: VideoMetadata | TaskMetadata) -> Path:
-    if metadata.platform == "bilibili":
+    if metadata.platform == "bilibili" or getattr(metadata, "source_language", None) == "zh":
         return metadata.task_dir / "transcript.zh.md"
     return metadata.task_dir / "transcript.en.md"
 
@@ -414,6 +439,10 @@ def _available_artifacts(task_dir: Path) -> list[str]:
         ("article.md", "article"),
         ("script.md", "script"),
         ("titles.md", "titles"),
+        ("article.wechat.md", "article.wechat.md"),
+        ("article.wechat.html", "article.wechat.html"),
+        ("x_article.x.md", "x_article.x.md"),
+        ("x_article.x.txt", "x_article.x.txt"),
     ]
     return [label for filename, label in candidates if (task_dir / filename).exists()]
 
@@ -425,6 +454,10 @@ def _metadata_path(task_dir: Path) -> Path:
 def _echo_generated_paths(generated_paths: list[Path]) -> None:
     for generated_path in generated_paths:
         typer.echo(f"Generated: {generated_path}")
+
+
+def _echo_progress(message: str) -> None:
+    typer.echo(f"Progress: {message}")
 
 
 def fetch_initial_video_metadata(url: str, config=None) -> VideoMetadata:

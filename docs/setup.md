@@ -106,6 +106,20 @@ asr:
   mlx_whisper_model: mlx-community/whisper-base.en-mlx
 ```
 
+当前中文视频默认复用 `faster-whisper` 作为较轻量的兜底链路。如果你要实验 `FunASR`，可以显式补：
+
+```yaml
+asr:
+  chinese_provider: funasr
+  funasr_model: paraformer
+```
+
+如果视频平台是 YouTube、但视频语言是中文，请在处理命令中加 `--lang zh`：
+
+```bash
+python3 -m video2post.cli process "YOUTUBE_URL" --lang zh --generate
+```
+
 如果某些 YouTube 视频提示需要登录或确认不是机器人，建议在 `config.yaml` 里再补：
 
 ```yaml
