@@ -108,9 +108,11 @@ python3 -m video2post.cli samples
 ```bash
 video2post process URL --output ./outputs
 video2post process URL --generate --targets x_article,x_thread,x_titles
+video2post process URL --lang zh --generate
 video2post process URL --generate --targets cover --cover-at 00:00:30
 video2post process URL --cleanup-source
 video2post process URL --no-transcribe
+video2post process URL --lang zh
 video2post process URL --no-download
 ```
 
@@ -131,6 +133,14 @@ asr:
   english_provider: mlx_whisper
   mlx_whisper_model: mlx-community/whisper-base.en-mlx
 ```
+
+如果 YouTube 视频本身是中文，可以显式指定中文链路：
+
+```bash
+python3 -m video2post.cli process "YOUTUBE_URL" --lang zh --generate
+```
+
+这会输出 `transcript.zh.md`，并跳过英文翻译目标，直接基于中文转写稿生成内容素材和发布格式。
 
 ## 处理流程
 
@@ -162,6 +172,10 @@ outputs/
     x_article.md
     x_thread.md
     x_titles.md
+    article.wechat.md
+    article.wechat.html
+    x_article.x.md
+    x_article.x.txt
     cover.jpg
     cover.meta.json
     article.md
@@ -179,6 +193,10 @@ outputs/
 - `x_article.md`：适合直接复制到 X 长文的中文成稿。
 - `x_thread.md`：适合拆成 X thread 的短段版本。
 - `x_titles.md`：适合 X 发布场景的开头钩子和标题候选。
+- `article.wechat.md`：公众号发布前可编辑 Markdown 版本。
+- `article.wechat.html`：可复制到微信公众号编辑器的 HTML 版本，内置适配公众号的 inline 样式。
+- `x_article.x.md`：适合 X Articles 的 Markdown 发布版本。
+- `x_article.x.txt`：适合直接粘贴到 X 长文编辑器的纯文本版本。
 - `cover.jpg`：从视频截图适配出的封面图。
 - `cover.meta.json`：封面图来源时间点、源链接和导出信息。
 - `article.md`：技术博客或公众号长文草稿。

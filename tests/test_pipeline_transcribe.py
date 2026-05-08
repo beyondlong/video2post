@@ -108,6 +108,30 @@ def test_transcribe_audio_groups_segments_into_paragraphs(tmp_path):
     assert "\n\nFirst sentence. Second sentence.\n\nNew paragraph.\n" in transcript_text
 
 
+def test_transcribe_audio_writes_chinese_transcript_for_youtube_when_language_is_zh(tmp_path):
+    audio = tmp_path / "audio.wav"
+    audio.write_text("audio", encoding="utf-8")
+    metadata = TaskMetadata(
+        source_url="https://youtu.be/test",
+        platform="youtube",
+        task_dir=tmp_path,
+        video=VideoMetadata(title="中文 YouTube"),
+        source_language="zh",
+    )
+    write_metadata(metadata)
+    transcriber = FakeTranscriber()
+
+    transcript_path = transcribe_audio(
+        tmp_path / "meta.json",
+        AppConfig(),
+        transcriber=transcriber,
+    )
+
+    assert transcript_path == tmp_path / "transcript.zh.md"
+    assert "Transcript ZH" in transcript_path.read_text(encoding="utf-8")
+    assert transcriber.calls == [(audio, "zh")]
+
+
 def test_transcribe_audio_writes_chinese_transcript_for_bilibili(tmp_path):
     audio = tmp_path / "audio.wav"
     audio.write_text("audio", encoding="utf-8")

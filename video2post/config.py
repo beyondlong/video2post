@@ -41,7 +41,7 @@ def _default_mlx_whisper_model() -> str:
 class AsrSettings(BaseModel):
     default_language: str = "auto"
     english_provider: str = Field(default_factory=_default_english_provider)
-    chinese_provider: str = "funasr"
+    chinese_provider: str = "faster_whisper"
     faster_whisper_model: str = "base"
     mlx_whisper_model: str = Field(default_factory=_default_mlx_whisper_model)
     funasr_model: str = "paraformer"
@@ -68,6 +68,7 @@ class GenerationSettings(BaseModel):
             "article",
             "script",
             "titles",
+            "publish_formats",
         ]
     )
     chunk_max_chars: int = 6000

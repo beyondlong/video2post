@@ -508,7 +508,9 @@ python3 -m pytest tests/test_pipeline_generate.py tests/test_cli.py -q
 
 - 阶段 7：长视频分块处理
   - 已完成基础分块、chunk 摘要、摘要复用
-  - 仍待完善更精细的 segment 切块、超长视频多级汇总、更多真实长视频验收
+  - 已完成基于 `transcript.segments.json` 的 segment 优先切块，chunk 中会保留时间范围
+  - 已完成可选全局摘要层：存在 `global_summary.md` 模板时输出 `summaries/global.summary.md`
+  - 仍待补更多真实长视频验收和质量调优
 
 - 阶段 8：B 站中文视频支持
   - 已完成平台识别、音频处理、中文稿输出、`notes/article/script/titles` 生成
@@ -549,28 +551,26 @@ python3 -m pytest tests/test_pipeline_generate.py tests/test_cli.py -q
 
 长视频和 B 站链路并不是“完全没做”，而是还没有收口到稳定完成态：
 
-- 长视频分块已具备基础能力：当转写稿长度超过 `generation.chunk_max_chars` 时，系统会先输出 `chunks/` 和 `summaries/` 中间文件，再使用合并后的 chunk 摘要生成最终二创内容。重新生成最终稿件时，已有且非空的 chunk 摘要会被复用，避免重复调用 LLM。
+- 长视频分块已具备 segment 优先能力：当转写稿长度超过 `generation.chunk_max_chars` 时，系统会优先基于 `transcript.segments.json` 聚合切块，并输出带时间范围的 `chunks/`；随后生成局部摘要到 `summaries/`，如存在 `global_summary.md` 模板，还会生成 `summaries/global.summary.md` 供最终二创内容使用。重新生成最终稿件时，已有且非空的 chunk 摘要和全局摘要会被复用，避免重复调用 LLM。
 - B 站中文链路已经能真实跑通，但仍需要继续补真实样例和中文 ASR 默认方案验证。
 
 当前仍需继续完善：
 
-- 基于 ASR segment 的更精细切块。
-- 针对超长视频的全局摘要和多级汇总。
 - 更完整的真实长视频测试。
+- 继续优化 chunk 边界质量和全局摘要提示词。
 - `--fast` 模式和更激进的“快速出稿”链路优化。
 - B 站更多真实样例验收和 `FunASR` 独立演进。
 
 ## 下一步建议
 
-继续推进阶段 7：长视频分块处理。
+继续用真实长视频验收阶段 7，并准备推进阶段 7.5：快速出稿模式。
 
 建议顺序：
 
-1. 基于 `transcript.en.md` 或 ASR segment 做文本切块。
-2. 输出 `chunks/chunk-001.md` 等中间文件。
-3. 为每个 chunk 生成局部摘要。
-4. 输出 `summaries/chunk-001.summary.md` 等中间文件。
-5. 基于局部摘要生成全局笔记。
-6. 再基于全局笔记生成长文、口播稿和标题。
+1. 用一条 30 分钟以上 YouTube 技术视频跑真实验收。
+2. 检查 `chunks/` 是否按时间范围合理切分。
+3. 检查 `summaries/global.summary.md` 是否覆盖全片主线。
+4. 根据真实输出微调 `chunk_summary.md` 和 `global_summary.md`。
+5. 进入 `--fast` 快速出稿模式设计与实现。
 
 这样可以让 30-90 分钟技术视频更稳定，也更适合后续真实自媒体工作流。

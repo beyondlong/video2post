@@ -79,7 +79,14 @@ def markdown_inline_to_html(
         )
 
     escaped = _LINK_RE.sub(replace_link, escaped)
-    escaped = _CODE_RE.sub(lambda match: f"<code>{match.group(1)}</code>", escaped)
+    escaped = _CODE_RE.sub(
+        lambda match: (
+            "<code style=\"background: #f7f1e7; color: #8f4f1f; padding: 0.1em 0.3em; "
+            "border-radius: 4px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; "
+            f"font-size: 0.92em;\">{match.group(1)}</code>"
+        ),
+        escaped,
+    )
     escaped = _BOLD_RE.sub(lambda match: f"<strong>{match.group(1)}</strong>", escaped)
     escaped = _ITALIC_RE.sub(lambda match: f"<em>{match.group(1)}</em>", escaped)
     for index, rendered in enumerate(image_placeholders):

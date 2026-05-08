@@ -1,7 +1,8 @@
 from video2post.config import AppConfig
-from video2post.models import TaskMetadata, TaskStatus, VideoMetadata
+from video2post.models import TaskMetadata, TaskStatus, TranscriptSegment, VideoMetadata
 from video2post.pipeline import generate_outputs
 from video2post.writers.metadata import read_metadata, write_metadata
+from video2post.writers.transcript import write_transcript_segments
 
 
 class FakeProvider:
@@ -132,6 +133,10 @@ def test_generate_outputs_uses_default_targets(tmp_path):
         "article.md",
         "script.md",
         "titles.md",
+        "article.wechat.md",
+        "article.wechat.html",
+        "x_article.x.md",
+        "x_article.x.txt",
     ]
 
 
@@ -165,8 +170,76 @@ def test_generate_outputs_marks_bilibili_default_run_as_completed(tmp_path):
         "article.md",
         "script.md",
         "titles.md",
+        "article.wechat.md",
+        "article.wechat.html",
+        "x_article.x.md",
+        "x_article.x.txt",
     ]
     assert loaded.status == TaskStatus.COMPLETED
+
+
+def test_generate_outputs_default_includes_publish_formats(tmp_path):
+    metadata = TaskMetadata(
+        source_url="https://youtu.be/test",
+        platform="youtube",
+        task_dir=tmp_path,
+        video=VideoMetadata(title="Test Video"),
+    )
+    write_metadata(metadata)
+    (tmp_path / "transcript.en.md").write_text("English transcript", encoding="utf-8")
+    prompt_dir = tmp_path / "prompts"
+    prompt_dir.mkdir()
+    for name in [
+        "translation",
+        "notes",
+        "x_article",
+        "x_thread",
+        "x_titles",
+        "article",
+        "script",
+        "titles",
+    ]:
+        (prompt_dir / f"{name}.md").write_text(name, encoding="utf-8")
+
+    outputs = generate_outputs(
+        tmp_path / "meta.json",
+        AppConfig(),
+        provider=FakeProvider(),
+        prompt_dir=prompt_dir,
+    )
+
+    assert [path.name for path in outputs][-4:] == [
+        "article.wechat.md",
+        "article.wechat.html",
+        "x_article.x.md",
+        "x_article.x.txt",
+    ]
+    assert (tmp_path / "article.wechat.html").exists()
+    assert (tmp_path / "x_article.x.txt").exists()
+
+
+def test_generate_outputs_can_run_publish_formats_explicitly(tmp_path):
+    metadata = TaskMetadata(
+        source_url="https://youtu.be/test",
+        platform="youtube",
+        task_dir=tmp_path,
+        video=VideoMetadata(title="Test Video"),
+    )
+    write_metadata(metadata)
+    (tmp_path / "x_article.md").write_text("# X 稿", encoding="utf-8")
+
+    outputs = generate_outputs(
+        tmp_path / "meta.json",
+        AppConfig(),
+        targets=["publish_formats"],
+    )
+
+    assert [path.name for path in outputs] == [
+        "x_article.wechat.md",
+        "x_article.wechat.html",
+        "x_article.x.md",
+        "x_article.x.txt",
+    ]
 
 
 def test_generate_outputs_keeps_partial_status_for_partial_target_run(tmp_path):
@@ -319,6 +392,10 @@ def test_generate_outputs_keeps_completed_when_all_expected_outputs_exist(tmp_pa
     (tmp_path / "article.md").write_text("article", encoding="utf-8")
     (tmp_path / "script.md").write_text("script", encoding="utf-8")
     (tmp_path / "titles.md").write_text("titles", encoding="utf-8")
+    (tmp_path / "article.wechat.md").write_text("wechat md", encoding="utf-8")
+    (tmp_path / "article.wechat.html").write_text("wechat html", encoding="utf-8")
+    (tmp_path / "x_article.x.md").write_text("x md", encoding="utf-8")
+    (tmp_path / "x_article.x.txt").write_text("x txt", encoding="utf-8")
     prompt_dir = tmp_path / "prompts"
     prompt_dir.mkdir()
     (prompt_dir / "article.md").write_text("article", encoding="utf-8")
@@ -333,6 +410,53 @@ def test_generate_outputs_keeps_completed_when_all_expected_outputs_exist(tmp_pa
 
     loaded = read_metadata(tmp_path / "meta.json")
     assert loaded.status == TaskStatus.COMPLETED
+
+
+def test_generate_outputs_reports_generation_progress(tmp_path):
+    metadata = TaskMetadata(
+        source_url="https://youtu.be/test",
+        platform="youtube",
+        task_dir=tmp_path,
+        video=VideoMetadata(title="Long Video"),
+    )
+    write_metadata(metadata)
+    (tmp_path / "transcript.en.md").write_text(
+        "paragraph one has enough text\n\nparagraph two has enough text",
+        encoding="utf-8",
+    )
+    prompt_dir = tmp_path / "prompts"
+    prompt_dir.mkdir()
+    (prompt_dir / "chunk_summary.md").write_text(
+        "chunk summary {{ chunk_index }}",
+        encoding="utf-8",
+    )
+    (prompt_dir / "global_summary.md").write_text(
+        "global summary {{ chunk_summaries }}",
+        encoding="utf-8",
+    )
+    (prompt_dir / "notes.md").write_text(
+        "final notes {{ transcript }}",
+        encoding="utf-8",
+    )
+    events = []
+
+    generate_outputs(
+        tmp_path / "meta.json",
+        AppConfig.model_validate({"generation": {"chunk_max_chars": 35}}),
+        provider=FakeProvider(),
+        prompt_dir=prompt_dir,
+        targets=["notes"],
+        progress_callback=events.append,
+    )
+
+    assert events == [
+        "Preparing transcript chunks...",
+        "Summarizing chunk 1/2...",
+        "Summarizing chunk 2/2...",
+        "Generating global summary...",
+        "Generating notes...",
+        "Generated notes.md",
+    ]
 
 
 def test_generate_outputs_summarizes_large_transcript_in_chunks(tmp_path):
@@ -384,6 +508,96 @@ def test_generate_outputs_summarizes_large_transcript_in_chunks(tmp_path):
     assert "paragraph one has enough text" in (
         tmp_path / "chunks" / "chunk-001.md"
     ).read_text(encoding="utf-8")
+
+
+def test_generate_outputs_prefers_segment_chunks_when_segments_exist(tmp_path):
+    metadata = TaskMetadata(
+        source_url="https://youtu.be/test",
+        platform="youtube",
+        task_dir=tmp_path,
+        video=VideoMetadata(title="Segmented Video"),
+    )
+    write_metadata(metadata)
+    (tmp_path / "transcript.en.md").write_text(
+        "flat transcript fallback should not be used for segment chunks",
+        encoding="utf-8",
+    )
+    write_transcript_segments(
+        tmp_path / "transcript.segments.json",
+        [
+            TranscriptSegment(start=0, end=5, text="First segment has enough text.", language="en"),
+            TranscriptSegment(start=5, end=10, text="Second segment has enough text.", language="en"),
+            TranscriptSegment(start=10, end=15, text="Third segment has enough text.", language="en"),
+        ],
+    )
+    prompt_dir = tmp_path / "prompts"
+    prompt_dir.mkdir()
+    (prompt_dir / "chunk_summary.md").write_text(
+        "summarize chunk {{ chunk_index }} of {{ chunk_count }}\n{{ transcript_chunk }}",
+        encoding="utf-8",
+    )
+    (prompt_dir / "notes.md").write_text(
+        "final notes\n{{ transcript }}",
+        encoding="utf-8",
+    )
+    provider = FakeProvider()
+
+    generate_outputs(
+        tmp_path / "meta.json",
+        AppConfig.model_validate({"generation": {"chunk_max_chars": 45}}),
+        provider=provider,
+        prompt_dir=prompt_dir,
+        targets=["notes"],
+    )
+
+    chunk_text = (tmp_path / "chunks" / "chunk-001.md").read_text(encoding="utf-8")
+    assert "[00:00:00 - 00:00:05] First segment has enough text." in chunk_text
+    assert "flat transcript fallback" not in chunk_text
+    assert provider.prompts[0].startswith("summarize chunk 1 of 3")
+
+
+def test_generate_outputs_writes_global_summary_when_prompt_exists(tmp_path):
+    metadata = TaskMetadata(
+        source_url="https://youtu.be/test",
+        platform="youtube",
+        task_dir=tmp_path,
+        video=VideoMetadata(title="Long Video"),
+    )
+    write_metadata(metadata)
+    (tmp_path / "transcript.en.md").write_text(
+        "paragraph one has enough text\n\nparagraph two has enough text",
+        encoding="utf-8",
+    )
+    prompt_dir = tmp_path / "prompts"
+    prompt_dir.mkdir()
+    (prompt_dir / "chunk_summary.md").write_text(
+        "chunk summary {{ chunk_index }}\n{{ transcript_chunk }}",
+        encoding="utf-8",
+    )
+    (prompt_dir / "global_summary.md").write_text(
+        "global summary for {{ video_title }}\n{{ chunk_summaries }}",
+        encoding="utf-8",
+    )
+    (prompt_dir / "notes.md").write_text(
+        "final notes\n{{ transcript }}",
+        encoding="utf-8",
+    )
+    provider = FakeProvider()
+
+    generate_outputs(
+        tmp_path / "meta.json",
+        AppConfig.model_validate({"generation": {"chunk_max_chars": 35}}),
+        provider=provider,
+        prompt_dir=prompt_dir,
+        targets=["notes"],
+    )
+
+    global_summary = tmp_path / "summaries" / "global.summary.md"
+    assert global_summary.exists()
+    assert "Generated from: global summary for Long Video" in global_summary.read_text(encoding="utf-8")
+    assert len(provider.prompts) == 4
+    assert provider.prompts[-2].startswith("global summary for Long Video")
+    assert "Generated from: global summary for Long Video" in provider.prompts[-1]
 
 
 def test_generate_outputs_reuses_existing_chunk_summaries(tmp_path):
@@ -463,6 +677,37 @@ def test_generate_outputs_can_use_chinese_transcript_as_source(tmp_path):
     assert "中文整理稿" in provider.prompts[0]
 
 
+def test_generate_outputs_skips_translation_by_default_for_chinese_youtube(tmp_path):
+    metadata = TaskMetadata(
+        source_url="https://youtu.be/test",
+        platform="youtube",
+        task_dir=tmp_path,
+        video=VideoMetadata(title="中文 YouTube"),
+        source_language="zh",
+    )
+    write_metadata(metadata)
+    (tmp_path / "transcript.zh.md").write_text("中文转写稿", encoding="utf-8")
+    prompt_dir = tmp_path / "prompts"
+    prompt_dir.mkdir()
+    for name in ["translation", "notes", "x_article", "x_thread", "x_titles", "article", "script", "titles"]:
+        (prompt_dir / f"{name}.md").write_text(
+            f"{name}: {{{{ video_title }}}}\n{{{{ transcript }}}}",
+            encoding="utf-8",
+        )
+    provider = FakeProvider()
+
+    generate_outputs(
+        tmp_path / "meta.json",
+        AppConfig(),
+        provider=provider,
+        prompt_dir=prompt_dir,
+    )
+
+    assert len(provider.prompts) == 7
+    assert all(not prompt.startswith("translation:") for prompt in provider.prompts)
+    assert "中文转写稿" in provider.prompts[0]
+
+
 def test_generate_outputs_skips_translation_by_default_for_bilibili(tmp_path):
     metadata = TaskMetadata(
         source_url="https://www.bilibili.com/video/BV123",
@@ -507,6 +752,10 @@ def test_generate_outputs_skips_translation_by_default_for_bilibili(tmp_path):
         "article.md",
         "script.md",
         "titles.md",
+        "article.wechat.md",
+        "article.wechat.html",
+        "x_article.x.md",
+        "x_article.x.txt",
     ]
     assert transcript_path.read_text(encoding="utf-8") == original_transcript
     assert len(provider.prompts) == 7

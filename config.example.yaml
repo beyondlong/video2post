@@ -24,7 +24,9 @@ asr:
   # On macOS, the runtime default is mlx_whisper for faster English YouTube transcription.
   # On other systems, the runtime default remains faster_whisper.
   english_provider: mlx_whisper
-  chinese_provider: funasr
+  # FunASR remains available as an experimental Chinese ASR provider.
+  # Set chinese_provider: funasr explicitly if you want to test it.
+  chinese_provider: faster_whisper
   faster_whisper_model: base
   mlx_whisper_model: mlx-community/whisper-base.en-mlx
   funasr_model: paraformer
@@ -48,5 +50,6 @@ generation:
     - article
     - script
     - titles
+    - publish_formats
   # Transcripts longer than this value are summarized chunk by chunk before final generation.
   chunk_max_chars: 6000

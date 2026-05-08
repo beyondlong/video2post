@@ -37,6 +37,8 @@ video2post process "https://www.youtube.com/watch?v=474wZZHoWN4" --output ./outp
 - `x_article.md`
 - `x_thread.md`
 - `x_titles.md`
+- `article.wechat.md` / `article.wechat.html`
+- `x_article.x.md` / `x_article.x.txt`
 
 状态预期：
 

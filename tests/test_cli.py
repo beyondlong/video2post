@@ -157,6 +157,31 @@ def test_process_cleanup_source_option_overrides_config(tmp_path):
     assert "Source cleanup: enabled" in result.output
 
 
+def test_process_marks_metadata_fetched_when_initial_metadata_exists(monkeypatch, tmp_path):
+    monkeypatch.setattr(
+        "video2post.cli.fetch_initial_video_metadata",
+        lambda url, config=None: VideoMetadata(title="Fetched Title", author="Author"),
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            "process",
+            "https://www.youtube.com/watch?v=abc",
+            "--output",
+            str(tmp_path),
+            "--no-download",
+        ],
+    )
+
+    metadata = TaskMetadata.model_validate_json(
+        list(tmp_path.glob("*/meta.json"))[0].read_text(encoding="utf-8")
+    )
+    assert result.exit_code == 0
+    assert metadata.status == TaskStatus.METADATA_FETCHED
+    assert metadata.video.author == "Author"
+
+
 def test_process_can_run_full_pipeline_with_generate(monkeypatch, tmp_path):
     calls = []
 
@@ -174,7 +199,7 @@ def test_process_can_run_full_pipeline_with_generate(monkeypatch, tmp_path):
         calls.append(("transcribe", metadata_path.name))
         return metadata_path.parent / "transcript.en.md"
 
-    def fake_generate(metadata_path, config, targets=None, cover_at=None):
+    def fake_generate(metadata_path, config, targets=None, cover_at=None, progress_callback=None):
         calls.append(("generate", tuple(targets or [])))
         return [metadata_path.parent / "titles.md"]
 
@@ -305,11 +330,29 @@ download:
     )
 
 
+def test_generate_command_prints_progress_messages(monkeypatch, tmp_path):
+    _write_task_metadata(tmp_path, status=TaskStatus.TRANSCRIBED)
+
+    def fake_generate(metadata_path_arg, config, targets=None, cover_at=None, progress_callback=None):
+        progress_callback("Generating notes...")
+        progress_callback("Generated notes.md")
+        return [metadata_path_arg.parent / "notes.md"]
+
+    monkeypatch.setattr("video2post.cli.generate_outputs", fake_generate)
+
+    result = runner.invoke(app, ["generate", str(tmp_path), "--targets", "notes"])
+
+    assert result.exit_code == 0
+    assert "Progress: Generating notes..." in result.output
+    assert "Progress: Generated notes.md" in result.output
+    assert "Generated:" in result.output
+
+
 def test_generate_command_regenerates_selected_targets(monkeypatch, tmp_path):
     metadata_path = _write_task_metadata(tmp_path, status=TaskStatus.TRANSCRIBED)
     calls = []
 
-    def fake_generate(metadata_path_arg, config, targets=None, cover_at=None):
+    def fake_generate(metadata_path_arg, config, targets=None, cover_at=None, progress_callback=None):
         calls.append((metadata_path_arg, tuple(targets or [])))
         return [metadata_path_arg.parent / "titles.md"]
 
@@ -334,7 +377,7 @@ def test_generate_command_passes_cover_time(monkeypatch, tmp_path):
     metadata_path = _write_task_metadata(tmp_path, status=TaskStatus.TRANSCRIBED)
     calls = []
 
-    def fake_generate(metadata_path_arg, config, targets=None, cover_at=None):
+    def fake_generate(metadata_path_arg, config, targets=None, cover_at=None, progress_callback=None):
         calls.append((metadata_path_arg, tuple(targets or []), cover_at))
         return [metadata_path_arg.parent / "cover.jpg"]
 
@@ -399,7 +442,7 @@ def test_retry_can_generate_after_transcription(monkeypatch, tmp_path):
     )
     monkeypatch.setattr(
         "video2post.cli.generate_outputs",
-        lambda metadata_path_arg, config, targets=None, cover_at=None: calls.append(
+        lambda metadata_path_arg, config, targets=None, cover_at=None, progress_callback=None: calls.append(
             ("generate", tuple(targets or []))
         )
         or [metadata_path_arg.parent / "titles.md"],
@@ -472,7 +515,7 @@ generation:
         lambda metadata_path, config: metadata_path.parent / "transcript.en.md",
     )
 
-    def fake_generate(metadata_path, config, targets=None, cover_at=None):
+    def fake_generate(metadata_path, config, targets=None, cover_at=None, progress_callback=None):
         calls.append((config.generation.chunk_max_chars, tuple(targets or [])))
         return [metadata_path.parent / "notes.md"]
 
@@ -497,6 +540,52 @@ generation:
     assert calls == [(42, ("notes",))]
 
 
+def test_process_youtube_can_force_chinese_language(monkeypatch, tmp_path):
+    calls = []
+
+    monkeypatch.setattr(
+        "video2post.cli.fetch_initial_video_metadata",
+        lambda url, config=None: VideoMetadata(title="Chinese YouTube"),
+    )
+    monkeypatch.setattr(
+        "video2post.cli.prepare_audio",
+        lambda metadata_path, config: metadata_path.parent / "audio.wav",
+    )
+
+    def fake_transcribe(metadata_path, config):
+        metadata = TaskMetadata.model_validate_json(metadata_path.read_text(encoding="utf-8"))
+        calls.append(("transcribe", metadata.source_language))
+        transcript = metadata_path.parent / "transcript.zh.md"
+        transcript.write_text("中文转写稿", encoding="utf-8")
+        return transcript
+
+    def fake_generate(metadata_path, config, targets=None, cover_at=None, progress_callback=None):
+        metadata = TaskMetadata.model_validate_json(metadata_path.read_text(encoding="utf-8"))
+        calls.append(("generate", metadata.source_language))
+        return [metadata_path.parent / "notes.md"]
+
+    monkeypatch.setattr("video2post.cli.transcribe_audio", fake_transcribe)
+    monkeypatch.setattr("video2post.cli.generate_outputs", fake_generate)
+
+    result = runner.invoke(
+        app,
+        [
+            "process",
+            "https://www.youtube.com/watch?v=abc",
+            "--output",
+            str(tmp_path),
+            "--lang",
+            "zh",
+            "--generate",
+            "--targets",
+            "notes",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert calls == [("transcribe", "zh"), ("generate", "zh")]
+
+
 def test_process_bilibili_pipeline_can_generate_from_chinese_transcript(monkeypatch, tmp_path):
     calls = []
 
@@ -515,7 +604,7 @@ def test_process_bilibili_pipeline_can_generate_from_chinese_transcript(monkeypa
         transcript.write_text("中文整理稿", encoding="utf-8")
         return transcript
 
-    def fake_generate(metadata_path, config, targets=None, cover_at=None):
+    def fake_generate(metadata_path, config, targets=None, cover_at=None, progress_callback=None):
         calls.append(("generate", tuple(targets or [])))
         return [metadata_path.parent / "notes.md"]
 
