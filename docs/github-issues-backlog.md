@@ -44,6 +44,8 @@
 
 ## 2. Add `--fast` quick-draft mode for creator workflow
 
+Status: implemented in CLI. `process --fast` auto-generates `notes,x_article,x_thread,x_titles,publish_formats` unless explicit `--targets` are provided.
+
 ### Background
 
 当前 CLI 已经能跑完整链路，但对于个人创作者场景，“尽快出一版可用稿”很重要。此前已经讨论过 `--fast` 模式，但还未正式落地。

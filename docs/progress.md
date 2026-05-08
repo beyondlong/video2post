@@ -521,8 +521,9 @@ python3 -m pytest tests/test_pipeline_generate.py tests/test_cli.py -q
 ### 已记录但暂缓实现
 
 - 阶段 7.5：`--fast` 快速出稿模式
-  - 已讨论并记录方向
-  - 暂未进入正式开发
+  - 已实现 `process --fast`
+  - 未显式传 `--targets` 时默认输出 `notes/x_article/x_thread/x_titles/publish_formats`
+  - 显式传 `--targets` 时保持用户选择优先
 
 ### 新增主线方向
 
@@ -558,7 +559,7 @@ python3 -m pytest tests/test_pipeline_generate.py tests/test_cli.py -q
 
 - 更完整的真实长视频测试。
 - 继续优化 chunk 边界质量和全局摘要提示词。
-- `--fast` 模式和更激进的“快速出稿”链路优化。
+- 更激进的“快速出稿”链路优化，例如可选更小 ASR 模型和更少中间摘要。
 - B 站更多真实样例验收和 `FunASR` 独立演进。
 
 ## 下一步建议

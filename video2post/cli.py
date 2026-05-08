@@ -22,6 +22,11 @@ from video2post.writers.metadata import read_metadata, write_metadata
 from video2post.writers.workspace import create_task_workspace
 
 
+ALL_GENERATION_TARGETS = "translation,notes,x_article,x_thread,x_titles,article,script,titles,cover,publish_formats"
+FAST_GENERATION_TARGETS = ["notes", "x_article", "x_thread", "x_titles", "publish_formats"]
+FAST_GENERATION_TARGETS_TEXT = ",".join(FAST_GENERATION_TARGETS)
+
+
 app = typer.Typer(
     name="video2post",
     help="Turn technical videos into editable Chinese post drafts.",
@@ -72,11 +77,18 @@ def process(
             help="Generate derivative Markdown files with the configured LLM.",
         ),
     ] = False,
+    fast: Annotated[
+        bool,
+        typer.Option(
+            "--fast/--standard",
+            help=f"Run a quick creator draft and auto-generate {FAST_GENERATION_TARGETS_TEXT} unless --targets is set.",
+        ),
+    ] = False,
     targets: Annotated[
         str | None,
         typer.Option(
             "--targets",
-            help="Comma-separated generation targets, e.g. article,script,titles.",
+            help=f"Comma-separated generation targets: {ALL_GENERATION_TARGETS}.",
         ),
     ] = None,
     cover_at: Annotated[
@@ -94,7 +106,11 @@ def process(
         ),
     ] = None,
 ) -> None:
-    """Process a video URL through the local pipeline."""
+    """Process a video URL through the local pipeline.
+
+    Fast default targets: notes,x_article,x_thread,x_titles,publish_formats.
+    Supported targets: translation,notes,x_article,x_thread,x_titles,article,script,titles,cover,publish_formats.
+    """
     loaded_config = load_config(config)
     if cleanup_source is not None:
         loaded_config.app.cleanup_source = cleanup_source
@@ -133,8 +149,8 @@ def process(
             if transcribe:
                 transcript_path = transcribe_audio(metadata.task_dir / "meta.json", loaded_config)
                 typer.echo(f"Transcript: {transcript_path}")
-                if generate:
-                    selected_targets = _parse_targets(targets)
+                if generate or fast:
+                    selected_targets = _parse_process_targets(targets, fast=fast)
                     generated_paths = generate_outputs(
                         metadata.task_dir / "meta.json",
                         loaded_config,
@@ -163,7 +179,7 @@ def generate_command(
         str | None,
         typer.Option(
             "--targets",
-            help="Comma-separated generation targets, e.g. article,script,titles.",
+            help=f"Comma-separated generation targets: {ALL_GENERATION_TARGETS}.",
         ),
     ] = None,
     cover_at: Annotated[
@@ -174,7 +190,10 @@ def generate_command(
         ),
     ] = None,
 ) -> None:
-    """Regenerate derivative Markdown files for an existing task."""
+    """Regenerate derivative Markdown files for an existing task.
+
+    Supported targets: translation,notes,x_article,x_thread,x_titles,article,script,titles,cover,publish_formats.
+    """
     loaded_config = load_config(config)
     metadata_path = _metadata_path(task_dir)
     generated_paths = generate_outputs(
@@ -205,7 +224,7 @@ def retry(
         str | None,
         typer.Option(
             "--targets",
-            help="Comma-separated generation targets, e.g. article,script,titles.",
+            help=f"Comma-separated generation targets: {ALL_GENERATION_TARGETS}.",
         ),
     ] = None,
     cover_at: Annotated[
@@ -216,7 +235,10 @@ def retry(
         ),
     ] = None,
 ) -> None:
-    """Resume a task by running missing artifacts from its task directory."""
+    """Resume a task by running missing artifacts from its task directory.
+
+    Use --generate with --targets to fill selected generated outputs after audio/transcript recovery.
+    """
     loaded_config = load_config(config)
     metadata_path = _metadata_path(task_dir)
     metadata = read_metadata(metadata_path)
@@ -254,7 +276,7 @@ def format_command(
     input_path: Annotated[Path, typer.Argument(help="Markdown file to format.")],
     platform: Annotated[
         str,
-        typer.Option("--platform", help="Comma-separated platforms: wechat,x."),
+        typer.Option("--platform", help="Comma-separated platforms: wechat,x. WeChat writes *.wechat.md/html; X writes *.x.md/txt."),
     ] = "wechat,x",
     output: Annotated[
         Path | None,
@@ -264,11 +286,14 @@ def format_command(
         bool,
         typer.Option(
             "--rewrite",
-            help="Rewrite content with the configured LLM before formatting.",
+            help="Reserved LLM rewrite step before formatting; deterministic formatting usually does not need it.",
         ),
     ] = False,
 ) -> None:
-    """Format a Markdown file for publishing platforms."""
+    """Format a Markdown file for publishing platforms.
+
+    Platforms: wechat,x. WeChat writes *.wechat.md/html; X writes *.x.md/txt.
+    """
     try:
         platforms = parse_platforms(platform)
         result = format_markdown_file(
@@ -288,11 +313,11 @@ def format_task_command(
     task_dir: Annotated[Path, typer.Argument(help="Existing video2post task directory.")],
     source: Annotated[
         str | None,
-        typer.Option("--source", help="Task artifact source: article,x_article,notes,transcript."),
+        typer.Option("--source", help="Task artifact source: article,x_article,notes,transcript. WeChat uses article then x_article by default; X uses x_article then article."),
     ] = None,
     platform: Annotated[
         str,
-        typer.Option("--platform", help="Comma-separated platforms: wechat,x."),
+        typer.Option("--platform", help="Comma-separated platforms: wechat,x. WeChat writes *.wechat.md/html; X writes *.x.md/txt."),
     ] = "wechat,x",
     output: Annotated[
         Path | None,
@@ -302,11 +327,14 @@ def format_task_command(
         bool,
         typer.Option(
             "--rewrite",
-            help="Rewrite content with the configured LLM before formatting.",
+            help="Reserved LLM rewrite step before formatting; deterministic formatting usually does not need it.",
         ),
     ] = False,
 ) -> None:
-    """Format existing task artifacts for publishing platforms."""
+    """Format existing task artifacts for publishing platforms.
+
+    Sources: article,x_article,notes,transcript. WeChat uses article then x_article by default; X uses x_article then article.
+    """
     try:
         platforms = parse_platforms(platform)
         result = format_task_artifacts(
@@ -401,6 +429,15 @@ def _parse_targets(raw_targets: str | None) -> list[str] | None:
     if not raw_targets:
         return None
     return [target.strip() for target in raw_targets.split(",") if target.strip()]
+
+
+def _parse_process_targets(raw_targets: str | None, *, fast: bool) -> list[str] | None:
+    parsed_targets = _parse_targets(raw_targets)
+    if parsed_targets is not None:
+        return parsed_targets
+    if fast:
+        return FAST_GENERATION_TARGETS.copy()
+    return None
 
 
 def _expected_transcript_path(metadata: VideoMetadata | TaskMetadata) -> Path:

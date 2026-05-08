@@ -18,6 +18,23 @@ def test_cli_help_shows_application_name():
     assert "video2post" in result.output
 
 
+
+def test_process_help_documents_fast_and_targets():
+    result = runner.invoke(app, ["process", "--help"])
+
+    assert result.exit_code == 0
+    compact_output = "".join(result.output.split())
+    assert "notes,x_article,x_thread,x_titles,publish_formats" in compact_output
+    assert "translation,notes,x_article,x_thread,x_titles,article,script,titles,cover,publish_formats" in compact_output
+
+
+def test_format_task_help_documents_source_fallback():
+    result = runner.invoke(app, ["format-task", "--help"])
+
+    assert result.exit_code == 0
+    compact_output = " ".join(result.output.split())
+    assert "WeChat uses article then x_article" in compact_output
+
 def test_config_show_prints_effective_config():
     result = runner.invoke(app, ["config", "show"])
 
@@ -231,6 +248,82 @@ def test_process_can_run_full_pipeline_with_generate(monkeypatch, tmp_path):
     assert list(tmp_path.glob("*/meta.json"))[0].parent.name.endswith("real-video-title")
     assert "Transcript:" in result.output
     assert "Generated:" in result.output
+
+
+def test_process_fast_generates_default_quick_targets_without_generate_flag(monkeypatch, tmp_path):
+    calls = []
+
+    monkeypatch.setattr(
+        "video2post.cli.fetch_initial_video_metadata",
+        lambda url, config=None: VideoMetadata(title="Fast Video"),
+    )
+    monkeypatch.setattr(
+        "video2post.cli.prepare_audio",
+        lambda metadata_path, config: metadata_path.parent / "audio.wav",
+    )
+    monkeypatch.setattr(
+        "video2post.cli.transcribe_audio",
+        lambda metadata_path, config: metadata_path.parent / "transcript.en.md",
+    )
+
+    def fake_generate(metadata_path, config, targets=None, cover_at=None, progress_callback=None):
+        calls.append(tuple(targets or []))
+        return [metadata_path.parent / "x_article.md"]
+
+    monkeypatch.setattr("video2post.cli.generate_outputs", fake_generate)
+
+    result = runner.invoke(
+        app,
+        [
+            "process",
+            "https://www.youtube.com/watch?v=abc",
+            "--output",
+            str(tmp_path),
+            "--fast",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert calls == [("notes", "x_article", "x_thread", "x_titles", "publish_formats")]
+
+
+def test_process_fast_respects_explicit_targets(monkeypatch, tmp_path):
+    calls = []
+
+    monkeypatch.setattr(
+        "video2post.cli.fetch_initial_video_metadata",
+        lambda url, config=None: VideoMetadata(title="Fast Video"),
+    )
+    monkeypatch.setattr(
+        "video2post.cli.prepare_audio",
+        lambda metadata_path, config: metadata_path.parent / "audio.wav",
+    )
+    monkeypatch.setattr(
+        "video2post.cli.transcribe_audio",
+        lambda metadata_path, config: metadata_path.parent / "transcript.en.md",
+    )
+
+    def fake_generate(metadata_path, config, targets=None, cover_at=None, progress_callback=None):
+        calls.append(tuple(targets or []))
+        return [metadata_path.parent / "notes.md"]
+
+    monkeypatch.setattr("video2post.cli.generate_outputs", fake_generate)
+
+    result = runner.invoke(
+        app,
+        [
+            "process",
+            "https://www.youtube.com/watch?v=abc",
+            "--output",
+            str(tmp_path),
+            "--fast",
+            "--targets",
+            "notes",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert calls == [("notes",)]
 
 
 def test_process_can_skip_transcribe_and_generate(monkeypatch, tmp_path):

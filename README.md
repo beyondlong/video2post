@@ -107,6 +107,7 @@ python3 -m video2post.cli samples
 
 ```bash
 video2post process URL --output ./outputs
+video2post process URL --fast
 video2post process URL --generate --targets x_article,x_thread,x_titles
 video2post process URL --lang zh --generate
 video2post process URL --generate --targets cover --cover-at 00:00:30
@@ -141,6 +142,22 @@ python3 -m video2post.cli process "YOUTUBE_URL" --lang zh --generate
 ```
 
 这会输出 `transcript.zh.md`，并跳过英文翻译目标，直接基于中文转写稿生成内容素材和发布格式。
+
+### 快速出稿模式
+
+如果你只是想尽快拿到一版可编辑、可发布的二创草稿，可以使用 `--fast`：
+
+```bash
+video2post process URL --fast
+```
+
+`--fast` 会自动开启生成，不需要额外传 `--generate`。在未显式传 `--targets` 时，它只生成快速出稿所需的核心产物：`notes`、`x_article`、`x_thread`、`x_titles`、`publish_formats`。它会跳过标准模式默认的 `translation`、`article`、`script`、`titles`，因此更适合个人创作者先快速判断内容是否值得继续精修。
+
+如果你在 `--fast` 下显式传了 `--targets`，系统会尊重你的选择：
+
+```bash
+video2post process URL --fast --targets notes,x_article
+```
 
 ## 处理流程
 
@@ -273,6 +290,8 @@ python3 -m video2post.cli samples
 ```
 
 更完整的安装、配置和故障排查见：[docs/setup.md](docs/setup.md)。
+
+- CLI 参数和场景速查：[docs/cli-usage.md](docs/cli-usage.md)
 
 ## 回归样例
 

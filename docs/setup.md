@@ -191,6 +191,21 @@ video2post process "https://www.youtube.com/watch?v=474wZZHoWN4" --output ./outp
 python3 -m video2post.cli process "https://www.youtube.com/watch?v=474wZZHoWN4" --output ./outputs-check --generate --targets notes,titles --cleanup-source
 ```
 
+
+### 快速出稿模式
+
+创作者快速试稿可以直接运行：
+
+```bash
+video2post process "YOUTUBE_OR_BILIBILI_URL" --fast --cleanup-source
+```
+
+`--fast` 会自动生成 `notes.md`、`x_article.md`、`x_thread.md`、`x_titles.md` 和发布格式文件，省去标准模式里的完整翻译稿、通用长文、脚本和标题候选。需要自定义快速产物时可以继续传 `--targets`，例如：
+
+```bash
+video2post process "YOUTUBE_OR_BILIBILI_URL" --fast --targets notes,x_article
+```
+
 ### 跑一条 B 站样例
 
 ```bash
