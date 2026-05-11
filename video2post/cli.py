@@ -274,7 +274,10 @@ def retry(
 
 @app.command("draft")
 def draft_command(
-    content: Annotated[str, typer.Argument(help="Raw text content to turn into X draft material.")],
+    content: Annotated[
+        str | None,
+        typer.Argument(help="Raw text content or an X/Twitter status URL to turn into X draft material."),
+    ] = None,
     config: Annotated[
         Path | None,
         typer.Option("--config", "-c", help="Path to config.yaml."),
@@ -285,7 +288,7 @@ def draft_command(
     ] = "x_engage",
     x_url: Annotated[
         str | None,
-        typer.Option("--x-url", help="Optional X URL saved as context; the page is not fetched."),
+        typer.Option("--x-url", help="Optional X URL. If no content is provided, the tweet text is fetched via oEmbed."),
     ] = None,
     output: Annotated[
         Path | None,

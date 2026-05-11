@@ -117,6 +117,7 @@ video2post process URL --lang zh
 video2post process URL --no-download
 video2post draft "原始内容" --mode x_engage
 video2post draft "原始内容" --mode viral_280
+video2post draft --x-url "https://x.com/user/status/123"
 ```
 
 LLM 相关配置既可以放在 `.env`，也可以放在 `config.yaml`：
@@ -151,10 +152,11 @@ python3 -m video2post.cli process "YOUTUBE_URL" --lang zh --generate
 
 ```bash
 video2post draft "原始内容" --mode x_engage --x-url "https://x.com/user/status/123"
+video2post draft --x-url "https://x.com/user/status/123"
 video2post draft "原始内容" --mode viral_280
 ```
 
-`x_engage` 会生成回复候选、引用转发候选和独立短帖候选；`viral_280` 会生成一条 280 字符以内的短推。X 链接只作为上下文保存，不会自动抓取页面或自动发布。
+`x_engage` 会生成回复候选、引用转发候选和独立短帖候选；`viral_280` 会生成一条 280 字符以内的短推。只给 X 链接时会通过 oEmbed 尝试抓取原推正文；如果同时提供正文，X 链接只作为上下文保存。不会使用登录态，也不会自动发布。
 
 ### 快速出稿模式
 

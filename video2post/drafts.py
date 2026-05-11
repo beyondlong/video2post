@@ -9,6 +9,7 @@ from video2post.config import AppConfig
 from video2post.llm.openai_compatible import OpenAICompatibleProvider
 from video2post.llm.prompts import PromptRenderer
 from video2post.writers.markdown import write_markdown
+from video2post.x_fetcher import fetch_x_content, is_x_status_url
 
 SUPPORTED_DRAFT_MODES = {"x_engage", "viral_280"}
 VIRAL_280_LIMIT = 280
@@ -21,7 +22,7 @@ class DraftResult:
 
 
 def generate_draft(
-    content: str,
+    content: str | None,
     config: AppConfig,
     *,
     mode: str = "x_engage",
@@ -31,27 +32,40 @@ def generate_draft(
     provider: object | None = None,
     prompt_dir: Path | str = "prompts",
     progress_callback: Callable[[str], None] | None = None,
+    x_fetcher: Callable[[str], str] | None = None,
 ) -> DraftResult:
     normalized_mode = mode.strip().lower()
     if normalized_mode not in SUPPORTED_DRAFT_MODES:
         raise ValueError(f"Unsupported draft mode: {mode}. Supported modes: x_engage, viral_280.")
 
-    normalized_content = content.strip()
-    if not normalized_content:
-        raise ValueError("Draft content must not be empty.")
-
-    task_dir = _create_draft_dir(output_dir or Path("drafts"), title or normalized_content)
+    initial_content = content.strip() if content else ""
+    detected_x_url = x_url or (initial_content if is_x_status_url(initial_content) else None)
+    task_dir = _create_draft_dir(output_dir or Path("drafts"), title or initial_content or detected_x_url or "x-draft")
     generated_paths: list[Path] = []
     metadata = _new_metadata(
         task_dir=task_dir,
         mode=normalized_mode,
-        content=normalized_content,
-        x_url=x_url,
+        content=initial_content,
+        x_url=detected_x_url,
         title=title,
+        source="x_url" if _should_fetch_x_content(initial_content, detected_x_url) else "content",
     )
     _write_draft_metadata(task_dir, metadata)
 
     try:
+        normalized_content = initial_content
+        if _should_fetch_x_content(normalized_content, detected_x_url):
+            _report_progress(progress_callback, "Fetching X content...")
+            fetcher = x_fetcher or fetch_x_content
+            try:
+                normalized_content = fetcher(detected_x_url or "").strip()
+            except Exception as error:
+                raise DraftXFetchError(str(error)) from error
+        if not normalized_content:
+            raise ValueError("Draft content or X URL is required.")
+
+        metadata["content_chars"] = len(normalized_content)
+        _write_draft_metadata(task_dir, metadata)
         source_path = write_markdown(task_dir / "source.md", normalized_content)
         generated_paths.append(source_path)
 
@@ -98,14 +112,28 @@ def generate_draft(
         metadata["status"] = "failed"
         metadata["updated_at"] = _now()
         metadata["error"] = {
-            "stage": "viral_280_validation"
-            if "viral_280 output exceeds 280 characters" in str(error)
-            else "llm_generation",
+            "stage": _error_stage(error),
             "message": str(error),
             "retryable": True,
         }
         _write_draft_metadata(task_dir, metadata)
         raise
+
+
+class DraftXFetchError(RuntimeError):
+    pass
+
+
+def _should_fetch_x_content(content: str, x_url: str | None) -> bool:
+    return bool(x_url and (not content or content == x_url))
+
+
+def _error_stage(error: Exception) -> str:
+    if isinstance(error, DraftXFetchError):
+        return "x_fetch"
+    if "viral_280 output exceeds 280 characters" in str(error):
+        return "viral_280_validation"
+    return "llm_generation"
 
 
 def _generate_x_engage_outputs(
@@ -151,6 +179,7 @@ def _new_metadata(
     content: str,
     x_url: str | None,
     title: str | None,
+    source: str,
 ) -> dict:
     now = _now()
     return {
@@ -160,6 +189,7 @@ def _new_metadata(
         "task_dir": str(task_dir),
         "title": title,
         "x_url": x_url,
+        "source": source,
         "content_chars": len(content),
         "created_at": now,
         "updated_at": now,

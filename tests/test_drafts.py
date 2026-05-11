@@ -160,3 +160,88 @@ def test_generate_draft_records_llm_failure(tmp_path):
     assert metadata["status"] == "failed"
     assert metadata["error"]["stage"] == "llm_generation"
     assert not (task_dir / "brief.md").exists()
+
+
+def test_generate_draft_fetches_content_when_only_x_url_is_provided(tmp_path):
+    prompt_dir = tmp_path / "prompts"
+    write_prompts(prompt_dir)
+    provider = SequencedProvider([
+        "核心提炼",
+        "回复1\n回复2\n回复3",
+        "引用转发1\n引用转发2",
+        "短帖1\n短帖2",
+    ])
+    fetched_urls = []
+
+    def fake_fetcher(url):
+        fetched_urls.append(url)
+        return "来自 X 链接的原推正文"
+
+    result = generate_draft(
+        None,
+        AppConfig(),
+        mode="x_engage",
+        x_url="https://x.com/big/status/1",
+        output_dir=tmp_path / "drafts",
+        provider=provider,
+        prompt_dir=prompt_dir,
+        x_fetcher=fake_fetcher,
+    )
+
+    assert fetched_urls == ["https://x.com/big/status/1"]
+    assert (result.task_dir / "source.md").read_text(encoding="utf-8").strip() == "来自 X 链接的原推正文"
+    assert "来自 X 链接的原推正文" in provider.prompts[0]
+    metadata = json.loads((result.task_dir / "meta.json").read_text(encoding="utf-8"))
+    assert metadata["x_url"] == "https://x.com/big/status/1"
+    assert metadata["source"] == "x_url"
+
+
+def test_generate_draft_treats_positional_x_url_as_fetch_source(tmp_path):
+    prompt_dir = tmp_path / "prompts"
+    write_prompts(prompt_dir)
+    provider = SequencedProvider(["核心提炼", "短推内容"])
+
+    result = generate_draft(
+        "https://twitter.com/big/status/1",
+        AppConfig(),
+        mode="viral_280",
+        output_dir=tmp_path / "drafts",
+        provider=provider,
+        prompt_dir=prompt_dir,
+        x_fetcher=lambda url: "从 URL 获取的正文",
+    )
+
+    assert (result.task_dir / "source.md").read_text(encoding="utf-8").strip() == "从 URL 获取的正文"
+    metadata = json.loads((result.task_dir / "meta.json").read_text(encoding="utf-8"))
+    assert metadata["x_url"] == "https://twitter.com/big/status/1"
+    assert metadata["source"] == "x_url"
+
+
+def test_generate_draft_records_x_fetch_failure(tmp_path):
+    prompt_dir = tmp_path / "prompts"
+    write_prompts(prompt_dir)
+
+    def failing_fetcher(url):
+        raise RuntimeError("x fetch failed")
+
+    try:
+        generate_draft(
+            None,
+            AppConfig(),
+            mode="x_engage",
+            x_url="https://x.com/big/status/1",
+            output_dir=tmp_path / "drafts",
+            provider=SequencedProvider([]),
+            prompt_dir=prompt_dir,
+            x_fetcher=failing_fetcher,
+        )
+    except RuntimeError as error:
+        assert "x fetch failed" in str(error)
+    else:
+        raise AssertionError("Expected X fetch failure")
+
+    task_dir = next((tmp_path / "drafts").iterdir())
+    metadata = json.loads((task_dir / "meta.json").read_text(encoding="utf-8"))
+    assert metadata["status"] == "failed"
+    assert metadata["error"]["stage"] == "x_fetch"
+    assert not (task_dir / "source.md").exists()

@@ -82,6 +82,48 @@ def test_draft_command_generates_x_engage_pack(monkeypatch, tmp_path):
     assert "Generated:" in result.output
 
 
+
+
+def test_draft_command_accepts_x_url_without_content(monkeypatch):
+    class FakeDraftResult:
+        def __init__(self):
+            self.task_dir = Path("drafts/2026-05-11-test")
+            self.paths = [self.task_dir / "source.md"]
+
+    calls = []
+
+    def fake_generate_draft(content, config, *, mode, x_url=None, output_dir=None, title=None, progress_callback=None):
+        calls.append((content, mode, x_url))
+        return FakeDraftResult()
+
+    monkeypatch.setattr("video2post.cli.generate_draft", fake_generate_draft)
+
+    result = runner.invoke(app, ["draft", "--x-url", "https://x.com/big/status/1"])
+
+    assert result.exit_code == 0
+    assert calls == [(None, "x_engage", "https://x.com/big/status/1")]
+
+
+def test_draft_command_accepts_x_url_as_content(monkeypatch):
+    class FakeDraftResult:
+        def __init__(self):
+            self.task_dir = Path("drafts/2026-05-11-test")
+            self.paths = [self.task_dir / "source.md"]
+
+    calls = []
+
+    def fake_generate_draft(content, config, *, mode, x_url=None, output_dir=None, title=None, progress_callback=None):
+        calls.append((content, mode, x_url))
+        return FakeDraftResult()
+
+    monkeypatch.setattr("video2post.cli.generate_draft", fake_generate_draft)
+
+    result = runner.invoke(app, ["draft", "https://x.com/big/status/1", "--mode", "viral_280"])
+
+    assert result.exit_code == 0
+    assert calls == [("https://x.com/big/status/1", "viral_280", None)]
+
+
 def test_draft_command_reports_generation_failure(monkeypatch):
     def fake_generate_draft(*args, **kwargs):
         raise RuntimeError("viral_280 output exceeds 280 characters")
