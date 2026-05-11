@@ -1,3 +1,4 @@
+import re
 from html.parser import HTMLParser
 from urllib.parse import urlparse
 
@@ -53,11 +54,33 @@ def fetch_x_content(
     if not isinstance(html, str):
         raise XContentFetchError("Could not extract tweet text from X oEmbed response.")
 
-    text = _extract_tweet_text(html)
+    raw_text = _extract_tweet_text(html)
+    if not raw_text:
+        raise XContentFetchError("Could not extract tweet text from X oEmbed response.")
+    if _is_link_only_text(raw_text):
+        raise XContentFetchError(
+            "X post contains only links or media; paste the linked article or tweet text instead."
+        )
+    text = _clean_tweet_text(raw_text)
     if not text:
         raise XContentFetchError("Could not extract tweet text from X oEmbed response.")
     return text
 
+
+
+def _clean_tweet_text(text: str) -> str:
+    cleaned = re.sub(r"https?://\S+", " ", text)
+    cleaned = re.sub(r"(?:pic\.)?twitter\.com/\S+", " ", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"t\.co/\S+", " ", cleaned, flags=re.IGNORECASE)
+    return " ".join(cleaned.split())
+
+
+def _is_link_only_text(text: str) -> bool:
+    compact = _clean_tweet_text(text)
+    if not compact:
+        return True
+    meaningful = re.sub(r"[\W_]+", "", compact, flags=re.UNICODE)
+    return len(meaningful) < 4
 
 def _extract_tweet_text(html: str) -> str:
     parser = _TweetParagraphParser()

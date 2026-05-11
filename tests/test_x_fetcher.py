@@ -46,7 +46,7 @@ def test_fetch_x_content_extracts_tweet_text_from_oembed_html():
 
     content = fetch_x_content("https://x.com/zhangsan/status/123", http_client=client)
 
-    assert content == "真正拉开差距的不是工具，而是反馈速度。 pic.twitter.com/abc"
+    assert content == "真正拉开差距的不是工具，而是反馈速度。"
     assert client.requests[0]["url"] == "https://publish.x.com/oembed"
     assert client.requests[0]["params"]["url"] == "https://x.com/zhangsan/status/123"
     assert client.requests[0]["params"]["omit_script"] == "1"
@@ -70,3 +70,36 @@ def test_fetch_x_content_raises_when_oembed_has_no_text():
         assert "Could not extract tweet text" in str(error)
     else:
         raise AssertionError("Expected empty oEmbed response to fail")
+
+
+def test_fetch_x_content_removes_short_links_from_text():
+    html = (
+        '<blockquote class="twitter-tweet">'
+        '<p lang="zh" dir="ltr">这篇文章讲透了 AI 产品的关键。'
+        '<a href="https://t.co/IYuqDZ5lxi">https://t.co/IYuqDZ5lxi</a></p>'
+        '&mdash; 张三 (@zhangsan)'
+        '</blockquote>'
+    )
+    client = FakeHttpClient(FakeResponse({"html": html}))
+
+    content = fetch_x_content("https://x.com/zhangsan/status/123", http_client=client)
+
+    assert content == "这篇文章讲透了 AI 产品的关键。"
+
+
+def test_fetch_x_content_rejects_link_only_tweet():
+    html = (
+        '<blockquote class="twitter-tweet">'
+        '<p lang="zxx" dir="ltr">'
+        '<a href="https://t.co/IYuqDZ5lxi">https://t.co/IYuqDZ5lxi</a></p>'
+        '&mdash; 张三 (@zhangsan)'
+        '</blockquote>'
+    )
+    client = FakeHttpClient(FakeResponse({"html": html}))
+
+    try:
+        fetch_x_content("https://x.com/zhangsan/status/123", http_client=client)
+    except XContentFetchError as error:
+        assert "only links or media" in str(error)
+    else:
+        raise AssertionError("Expected link-only tweet to fail")
