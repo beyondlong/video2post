@@ -1,14 +1,22 @@
 import httpx
 
-from video2post.x_fetcher import XContentFetchError, fetch_x_content, is_x_status_url
+from video2post.x_fetcher import XContentFetchError, fetch_x_content, is_x_article_url, is_x_status_url
 
 
 class FakeResponse:
-    def __init__(self, payload, status_code=200, text=None, url="https://publish.x.com/oembed"):
+    def __init__(
+        self,
+        payload,
+        status_code=200,
+        text=None,
+        url="https://publish.x.com/oembed",
+        headers=None,
+    ):
         self.payload = payload
         self.status_code = status_code
         self.text = text if text is not None else ""
         self.url = url
+        self.headers = headers or {}
 
     def raise_for_status(self):
         if self.status_code >= 400:
@@ -133,3 +141,124 @@ def test_fetch_x_content_rejects_link_only_tweet_when_link_page_has_no_text():
         assert "only links or media" in str(error)
     else:
         raise AssertionError("Expected link-only tweet to fail")
+
+
+def test_fetch_x_content_auto_uses_browser_for_x_article_links():
+    html = (
+        '<blockquote class="twitter-tweet">'
+        '<p lang="zxx" dir="ltr">'
+        '<a href="https://t.co/IYuqDZ5lxi">https://t.co/IYuqDZ5lxi</a></p>'
+        '&mdash; 张三 (@zhangsan)'
+        '</blockquote>'
+    )
+    client = FakeHttpClient({
+        "https://publish.x.com/oembed": FakeResponse({"html": html}),
+        "https://t.co/IYuqDZ5lxi": FakeResponse(
+            {},
+            status_code=301,
+            headers={"location": "https://x.com/i/article/2048775123893899264"},
+            url="https://t.co/IYuqDZ5lxi",
+        ),
+    })
+    browser_urls = []
+
+    def fake_browser_fetcher(url):
+        browser_urls.append(url)
+        return "浏览器登录态抓到的 X Article 正文"
+
+    content = fetch_x_content(
+        "https://x.com/zhangsan/status/123",
+        http_client=client,
+        fetch_mode="auto",
+        browser_fetcher=fake_browser_fetcher,
+    )
+
+    assert content == "浏览器登录态抓到的 X Article 正文"
+    assert browser_urls == ["https://x.com/zhangsan/status/123"]
+
+
+def test_fetch_x_content_public_reports_x_article_requires_browser():
+    html = (
+        '<blockquote class="twitter-tweet">'
+        '<p lang="zxx" dir="ltr">'
+        '<a href="https://t.co/IYuqDZ5lxi">https://t.co/IYuqDZ5lxi</a></p>'
+        '&mdash; 张三 (@zhangsan)'
+        '</blockquote>'
+    )
+    client = FakeHttpClient({
+        "https://publish.x.com/oembed": FakeResponse({"html": html}),
+        "https://t.co/IYuqDZ5lxi": FakeResponse(
+            {},
+            status_code=301,
+            headers={"location": "https://x.com/i/article/2048775123893899264"},
+            url="https://t.co/IYuqDZ5lxi",
+        ),
+    })
+
+    try:
+        fetch_x_content(
+            "https://x.com/zhangsan/status/123",
+            http_client=client,
+            fetch_mode="public",
+        )
+    except XContentFetchError as error:
+        assert "X Article requires browser fetch" in str(error)
+    else:
+        raise AssertionError("Expected X Article public fetch to fail clearly")
+
+
+def test_fetch_x_content_auto_uses_browser_when_link_only_cannot_resolve():
+    html = (
+        '<blockquote class="twitter-tweet">'
+        '<p lang="zxx" dir="ltr">'
+        '<a href="https://t.co/IYuqDZ5lxi">https://t.co/IYuqDZ5lxi</a></p>'
+        '&mdash; 张三 (@zhangsan)'
+        '</blockquote>'
+    )
+    client = FakeHttpClient({
+        "https://publish.x.com/oembed": FakeResponse({"html": html}),
+        "https://t.co/IYuqDZ5lxi": FakeResponse({}, status_code=500, url="https://t.co/IYuqDZ5lxi"),
+    })
+    browser_urls = []
+
+    def fake_browser_fetcher(url):
+        browser_urls.append(url)
+        return "浏览器从原始推文页抓到正文"
+
+    content = fetch_x_content(
+        "https://x.com/zhangsan/status/123",
+        http_client=client,
+        fetch_mode="auto",
+        browser_fetcher=fake_browser_fetcher,
+    )
+
+    assert content == "浏览器从原始推文页抓到正文"
+    assert browser_urls == ["https://x.com/zhangsan/status/123"]
+
+
+def test_fetch_x_content_auto_uses_browser_when_public_fetch_fails():
+    class FailingClient:
+        def get(self, url, *, params=None, timeout):
+            raise httpx.ConnectError("network down")
+
+    browser_urls = []
+
+    def fake_browser_fetcher(url):
+        browser_urls.append(url)
+        return "浏览器抓到正文"
+
+    content = fetch_x_content(
+        "https://x.com/zhangsan/status/123",
+        http_client=FailingClient(),
+        fetch_mode="auto",
+        browser_fetcher=fake_browser_fetcher,
+    )
+
+    assert content == "浏览器抓到正文"
+    assert browser_urls == ["https://x.com/zhangsan/status/123"]
+
+
+def test_is_x_article_url_accepts_public_and_internal_article_links():
+    assert is_x_article_url("https://x.com/i/article/2048775123893899264")
+    assert is_x_article_url("https://x.com/ai_xiaomu/article/2050007288560459820")
+    assert not is_x_article_url("https://x.com/ai_xiaomu/status/2050007288560459820")

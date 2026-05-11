@@ -290,6 +290,10 @@ def draft_command(
         str | None,
         typer.Option("--x-url", help="Optional X URL. If no content is provided, the tweet text is fetched via oEmbed."),
     ] = None,
+    x_fetch: Annotated[
+        str,
+        typer.Option("--x-fetch", help="X fetch mode when content is missing: auto, public, or browser."),
+    ] = "auto",
     output: Annotated[
         Path | None,
         typer.Option("--output", "-o", help="Output draft directory root. Defaults to ./drafts."),
@@ -310,6 +314,7 @@ def draft_command(
             output_dir=output,
             title=title,
             progress_callback=_echo_progress,
+            x_fetch_mode=x_fetch,
         )
     except (ValueError, RuntimeError) as error:
         typer.echo(str(error))

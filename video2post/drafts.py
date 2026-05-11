@@ -33,6 +33,7 @@ def generate_draft(
     prompt_dir: Path | str = "prompts",
     progress_callback: Callable[[str], None] | None = None,
     x_fetcher: Callable[[str], str] | None = None,
+    x_fetch_mode: str = "auto",
 ) -> DraftResult:
     normalized_mode = mode.strip().lower()
     if normalized_mode not in SUPPORTED_DRAFT_MODES:
@@ -49,6 +50,7 @@ def generate_draft(
         x_url=detected_x_url,
         title=title,
         source="x_url" if _should_fetch_x_content(initial_content, detected_x_url) else "content",
+        x_fetch_mode=x_fetch_mode,
     )
     _write_draft_metadata(task_dir, metadata)
 
@@ -56,9 +58,14 @@ def generate_draft(
         normalized_content = initial_content
         if _should_fetch_x_content(normalized_content, detected_x_url):
             _report_progress(progress_callback, "Fetching X content...")
-            fetcher = x_fetcher or fetch_x_content
             try:
-                normalized_content = fetcher(detected_x_url or "").strip()
+                if x_fetcher is not None:
+                    normalized_content = x_fetcher(detected_x_url or "").strip()
+                else:
+                    normalized_content = fetch_x_content(
+                        detected_x_url or "",
+                        fetch_mode=x_fetch_mode,
+                    ).strip()
             except Exception as error:
                 raise DraftXFetchError(str(error)) from error
         if not normalized_content:
@@ -180,6 +187,7 @@ def _new_metadata(
     x_url: str | None,
     title: str | None,
     source: str,
+    x_fetch_mode: str,
 ) -> dict:
     now = _now()
     return {
@@ -190,6 +198,7 @@ def _new_metadata(
         "title": title,
         "x_url": x_url,
         "source": source,
+        "x_fetch_mode": x_fetch_mode,
         "content_chars": len(content),
         "created_at": now,
         "updated_at": now,

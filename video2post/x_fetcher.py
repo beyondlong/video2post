@@ -11,6 +11,15 @@ class XContentFetchError(RuntimeError):
     pass
 
 
+class XArticleRequiresBrowserError(XContentFetchError):
+    def __init__(self, article_url: str) -> None:
+        self.article_url = article_url
+        super().__init__(
+            f"X Article requires browser fetch: {article_url}. "
+            "Use --x-fetch auto or --x-fetch browser after logging in to X in Chrome."
+        )
+
+
 def is_x_status_url(value: str | None) -> bool:
     if not value:
         return False
@@ -22,7 +31,54 @@ def is_x_status_url(value: str | None) -> bool:
     return len(parts) >= 3 and parts[1] == "status" and parts[2].isdigit()
 
 
+def is_x_article_url(value: str | None) -> bool:
+    if not value:
+        return False
+    parsed = urlparse(value.strip())
+    hostname = (parsed.hostname or "").lower()
+    if hostname not in {"x.com", "www.x.com", "twitter.com", "www.twitter.com"}:
+        return False
+    parts = [part for part in parsed.path.split("/") if part]
+    if len(parts) >= 3 and parts[0] == "i" and parts[1] == "article" and parts[2].isdigit():
+        return True
+    return len(parts) >= 3 and parts[1] == "article" and parts[2].isdigit()
+
+
 def fetch_x_content(
+    url: str,
+    *,
+    http_client: object | None = None,
+    timeout_seconds: int = 30,
+    fetch_mode: str = "public",
+    browser_fetcher: object | None = None,
+) -> str:
+    normalized_mode = fetch_mode.strip().lower()
+    if normalized_mode not in {"public", "auto", "browser"}:
+        raise ValueError("Expected X fetch mode: public, auto, or browser.")
+    if normalized_mode == "browser":
+        return _fetch_with_browser(url, browser_fetcher=browser_fetcher, timeout_seconds=timeout_seconds)
+
+    try:
+        return _fetch_x_content_public(url, http_client=http_client, timeout_seconds=timeout_seconds)
+    except XArticleRequiresBrowserError as error:
+        if normalized_mode == "auto":
+            return _fetch_with_browser(
+                url,
+                browser_fetcher=browser_fetcher,
+                timeout_seconds=timeout_seconds,
+            )
+        raise
+    except XContentFetchError:
+        if normalized_mode == "auto":
+            return _fetch_with_browser(
+                url,
+                browser_fetcher=browser_fetcher,
+                timeout_seconds=timeout_seconds,
+            )
+        raise
+
+
+def _fetch_x_content_public(
     url: str,
     *,
     http_client: object | None = None,
@@ -74,6 +130,27 @@ def fetch_x_content(
     return text
 
 
+def _fetch_with_browser(
+    url: str,
+    *,
+    browser_fetcher: object | None,
+    timeout_seconds: int,
+) -> str:
+    if browser_fetcher is None:
+        from video2post.x_browser_fetcher import fetch_x_content_with_browser
+
+        browser_fetcher = fetch_x_content_with_browser
+    try:
+        text = browser_fetcher(url, timeout_seconds=timeout_seconds)
+    except TypeError:
+        text = browser_fetcher(url)
+    content = str(text).strip()
+    if not content:
+        raise XContentFetchError(
+            "Could not extract X content with browser. Log in to X in the opened Chrome window and retry."
+        )
+    return content
+
 
 def _fetch_linked_content_from_tweet(
     html: str,
@@ -85,14 +162,62 @@ def _fetch_linked_content_from_tweet(
         if not _is_external_content_link(link):
             continue
         try:
-            response = client.get(link, params=None, timeout=timeout_seconds)
-            response.raise_for_status()
+            response = _client_get(
+                client,
+                link,
+                params=None,
+                timeout=timeout_seconds,
+                follow_redirects=False,
+            )
+            location = _redirect_location(response)
+            if is_x_article_url(location):
+                raise XArticleRequiresBrowserError(location or link)
+            if location and _is_external_content_link(location):
+                response = _client_get(client, location, params=None, timeout=timeout_seconds)
+            else:
+                response.raise_for_status()
+        except XArticleRequiresBrowserError:
+            raise
         except (httpx.HTTPError, ValueError):
             continue
+        final_url = str(getattr(response, "url", ""))
+        if is_x_article_url(final_url):
+            raise XArticleRequiresBrowserError(final_url)
         page_text = _extract_page_text(getattr(response, "text", ""))
-        if page_text:
+        if _has_meaningful_page_text(page_text):
             return page_text
     return ""
+
+
+def _client_get(
+    client: object,
+    url: str,
+    *,
+    params: dict | None,
+    timeout: int,
+    follow_redirects: bool | None = None,
+):
+    kwargs = {"params": params, "timeout": timeout}
+    if follow_redirects is not None:
+        kwargs["follow_redirects"] = follow_redirects
+    try:
+        return client.get(url, **kwargs)
+    except TypeError:
+        kwargs.pop("follow_redirects", None)
+        return client.get(url, **kwargs)
+
+
+def _redirect_location(response: object) -> str | None:
+    status_code = int(getattr(response, "status_code", 0) or 0)
+    if status_code < 300 or status_code >= 400:
+        return None
+    headers = getattr(response, "headers", {}) or {}
+    return headers.get("location") or headers.get("Location")
+
+
+def _has_meaningful_page_text(text: str) -> bool:
+    meaningful = re.sub(r"[\W_]+", "", text, flags=re.UNICODE)
+    return len(meaningful) >= 20
 
 
 def _extract_tweet_links(html: str) -> list[str]:

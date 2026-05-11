@@ -53,8 +53,10 @@ def test_draft_command_generates_x_engage_pack(monkeypatch, tmp_path):
 
     calls = []
 
-    def fake_generate_draft(content, config, *, mode, x_url=None, output_dir=None, title=None, progress_callback=None):
-        calls.append((content, mode, x_url, output_dir, title))
+    def fake_generate_draft(
+        content, config, *, mode, x_url=None, output_dir=None, title=None, progress_callback=None, x_fetch_mode="auto"
+    ):
+        calls.append((content, mode, x_url, output_dir, title, x_fetch_mode))
         if progress_callback:
             progress_callback("Generating draft brief...")
         return FakeDraftResult()
@@ -76,7 +78,7 @@ def test_draft_command_generates_x_engage_pack(monkeypatch, tmp_path):
     )
 
     assert result.exit_code == 0
-    assert calls == [("一段收藏内容", "x_engage", "https://x.com/big/status/1", tmp_path / "drafts", None)]
+    assert calls == [("一段收藏内容", "x_engage", "https://x.com/big/status/1", tmp_path / "drafts", None, "auto")]
     assert "Draft directory:" in result.output
     assert "Progress: Generating draft brief..." in result.output
     assert "Generated:" in result.output
@@ -92,8 +94,10 @@ def test_draft_command_accepts_x_url_without_content(monkeypatch):
 
     calls = []
 
-    def fake_generate_draft(content, config, *, mode, x_url=None, output_dir=None, title=None, progress_callback=None):
-        calls.append((content, mode, x_url))
+    def fake_generate_draft(
+        content, config, *, mode, x_url=None, output_dir=None, title=None, progress_callback=None, x_fetch_mode="auto"
+    ):
+        calls.append((content, mode, x_url, x_fetch_mode))
         return FakeDraftResult()
 
     monkeypatch.setattr("video2post.cli.generate_draft", fake_generate_draft)
@@ -101,7 +105,7 @@ def test_draft_command_accepts_x_url_without_content(monkeypatch):
     result = runner.invoke(app, ["draft", "--x-url", "https://x.com/big/status/1"])
 
     assert result.exit_code == 0
-    assert calls == [(None, "x_engage", "https://x.com/big/status/1")]
+    assert calls == [(None, "x_engage", "https://x.com/big/status/1", "auto")]
 
 
 def test_draft_command_accepts_x_url_as_content(monkeypatch):
@@ -112,8 +116,10 @@ def test_draft_command_accepts_x_url_as_content(monkeypatch):
 
     calls = []
 
-    def fake_generate_draft(content, config, *, mode, x_url=None, output_dir=None, title=None, progress_callback=None):
-        calls.append((content, mode, x_url))
+    def fake_generate_draft(
+        content, config, *, mode, x_url=None, output_dir=None, title=None, progress_callback=None, x_fetch_mode="auto"
+    ):
+        calls.append((content, mode, x_url, x_fetch_mode))
         return FakeDraftResult()
 
     monkeypatch.setattr("video2post.cli.generate_draft", fake_generate_draft)
@@ -121,7 +127,7 @@ def test_draft_command_accepts_x_url_as_content(monkeypatch):
     result = runner.invoke(app, ["draft", "https://x.com/big/status/1", "--mode", "viral_280"])
 
     assert result.exit_code == 0
-    assert calls == [("https://x.com/big/status/1", "viral_280", None)]
+    assert calls == [("https://x.com/big/status/1", "viral_280", None, "auto")]
 
 
 def test_draft_command_reports_generation_failure(monkeypatch):
@@ -989,3 +995,28 @@ def test_format_task_command_uses_existing_artifacts(tmp_path):
     assert result.exit_code == 0
     assert (task_dir / "article.wechat.md").exists()
     assert (task_dir / "article.wechat.html").exists()
+
+
+def test_draft_command_accepts_x_fetch_mode(monkeypatch):
+    class FakeDraftResult:
+        def __init__(self):
+            self.task_dir = Path("drafts/2026-05-11-test")
+            self.paths = [self.task_dir / "source.md"]
+
+    calls = []
+
+    def fake_generate_draft(
+        content, config, *, mode, x_url=None, output_dir=None, title=None, progress_callback=None, x_fetch_mode="auto"
+    ):
+        calls.append(x_fetch_mode)
+        return FakeDraftResult()
+
+    monkeypatch.setattr("video2post.cli.generate_draft", fake_generate_draft)
+
+    result = runner.invoke(
+        app,
+        ["draft", "--x-url", "https://x.com/big/status/1", "--x-fetch", "browser"],
+    )
+
+    assert result.exit_code == 0
+    assert calls == ["browser"]

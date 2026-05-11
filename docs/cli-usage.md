@@ -83,7 +83,7 @@ video2post draft --x-url "https://x.com/user/status/123"
 video2post draft "https://x.com/user/status/123" --mode viral_280
 ```
 
-如果只给 X 链接，系统会通过 X 官方 oEmbed 接口尝试抓取原推正文；如果原推只有外链，会继续尝试抓取外链页面的标题、摘要和正文段落，再生成草稿。`x_engage` 会在 `drafts/YYYY-MM-DD-.../` 下生成：
+如果只给 X 链接，系统默认使用 `--x-fetch auto`：先通过 X 官方 oEmbed 接口尝试抓取原推正文；如果原推只有外链，会继续尝试抓取外链页面的标题、摘要和正文段落；如果识别到 X Article 长文，会升级到 Chrome 登录态抓取，再生成草稿。`x_engage` 会在 `drafts/YYYY-MM-DD-.../` 下生成：
 
 - `source.md`
 - `brief.md`
@@ -98,7 +98,7 @@ video2post draft "https://x.com/user/status/123" --mode viral_280
 video2post draft "原始内容" --mode viral_280
 ```
 
-`--x-url` 会在缺少正文时尝试抓取原推正文；如果原推只有外链，会继续尝试抓取外链页面正文；如果同时提供正文，则只作为上下文保存。不会使用登录态，也不会自动发布。
+`--x-url` 会在缺少正文时尝试抓取原推正文；默认 `--x-fetch auto` 会在公开抓取失败且识别为 X Article 时升级到 Chrome 登录态抓取；如果同时提供正文，则只作为上下文保存。不会自动发布。
 
 ### 8. 对已有任务重新生成内容
 
@@ -194,7 +194,8 @@ video2post draft --x-url "https://x.com/user/status/123"
 | --- | --- | --- |
 | `--config -c PATH` | `config.yaml` | 指定配置文件。 |
 | `--mode TEXT` | `x_engage` | 草稿模式：`x_engage` 或 `viral_280`。 |
-| `--x-url TEXT` | 空 | 可选 X 链接。缺少正文时会通过 oEmbed 尝试抓取原推正文；原推只有外链时会尝试抓取外链页面正文。 |
+| `--x-url TEXT` | 空 | 可选 X 链接。缺少正文时会尝试抓取原推正文。 |
+| `--x-fetch TEXT` | `auto` | X 抓取模式：`auto` 先公开抓取，遇到 X Article 再用 Chrome 登录态；`public` 只公开抓取；`browser` 强制 Chrome 登录态。 |
 | `--output -o PATH` | `./drafts` | 草稿库根目录。 |
 | `--title TEXT` | 空 | 用于生成本地目录名的标题。 |
 

@@ -1,0 +1,20 @@
+{
+  "type": "draft",
+  "mode": "x_engage",
+  "status": "failed",
+  "task_dir": "drafts/2026-05-11-https-x-com-ai_xiaomu-status-20500072885604598",
+  "title": null,
+  "x_url": "https://x.com/ai_xiaomu/status/2050007288560459820",
+  "source": "x_url",
+  "x_fetch_mode": "auto",
+  "content_chars": 0,
+  "created_at": "2026-05-11T16:24:15",
+  "updated_at": "2026-05-11T16:27:29",
+  "llm_model": null,
+  "outputs": [],
+  "error": {
+    "stage": "x_fetch",
+    "message": "Could not extract X content with browser. Log in to X in the opened Chrome window and retry.",
+    "retryable": true
+  }
+}

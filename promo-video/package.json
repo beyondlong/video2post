@@ -1,0 +1,14 @@
+{
+  "name": "video2post-promo",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "lint": "hyperframes lint",
+    "inspect": "hyperframes inspect --samples 12",
+    "preview": "hyperframes preview --port 3017",
+    "render": "hyperframes render --output renders/video2post-promo.mp4 --quality standard"
+  },
+  "devDependencies": {
+    "hyperframes": "latest"
+  }
+}

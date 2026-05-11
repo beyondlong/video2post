@@ -245,3 +245,24 @@ def test_generate_draft_records_x_fetch_failure(tmp_path):
     assert metadata["status"] == "failed"
     assert metadata["error"]["stage"] == "x_fetch"
     assert not (task_dir / "source.md").exists()
+
+
+def test_generate_draft_records_x_fetch_mode(tmp_path):
+    prompt_dir = tmp_path / "prompts"
+    write_prompts(prompt_dir)
+    provider = SequencedProvider(["核心提炼", "短推内容"])
+
+    result = generate_draft(
+        None,
+        AppConfig(),
+        mode="viral_280",
+        x_url="https://x.com/big/status/1",
+        output_dir=tmp_path / "drafts",
+        provider=provider,
+        prompt_dir=prompt_dir,
+        x_fetcher=lambda url: "从 URL 获取的正文",
+        x_fetch_mode="browser",
+    )
+
+    metadata = json.loads((result.task_dir / "meta.json").read_text(encoding="utf-8"))
+    assert metadata["x_fetch_mode"] == "browser"
