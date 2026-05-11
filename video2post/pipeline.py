@@ -1,5 +1,7 @@
 import subprocess
 import json
+import re
+from collections import Counter
 from collections.abc import Callable
 from pathlib import Path
 
@@ -10,7 +12,7 @@ from video2post.asr.funasr import FunASRTranscriber
 from video2post.asr.mlx_whisper import MlxWhisperTranscriber
 from video2post.config import AppConfig
 from video2post.downloader.ytdlp import YtDlpDownloader
-from video2post.llm.openai_compatible import OpenAICompatibleProvider
+from video2post.llm.openai_compatible import LlmProviderError, OpenAICompatibleProvider
 from video2post.llm.prompts import PromptRenderer
 from video2post.formatters.models import Platform
 from video2post.formatters.service import format_task_artifacts
@@ -112,6 +114,7 @@ def transcribe_audio(
 
     try:
         segments = active_transcriber.transcribe(audio_path, language=transcript_language)
+        _validate_transcript_quality(metadata, segments)
         write_transcript(
             transcript_path,
             title=metadata.video.title or "untitled",
@@ -126,10 +129,15 @@ def transcribe_audio(
         write_metadata(metadata)
         return transcript_path
     except Exception as error:
+        error_stage = (
+            "transcription_quality"
+            if isinstance(error, TranscriptQualityError)
+            else TaskStatus.TRANSCRIBED.value
+        )
         update_status(
             metadata_path,
             TaskStatus.FAILED,
-            error_stage=TaskStatus.TRANSCRIBED.value,
+            error_stage=error_stage,
             error_message=str(error),
             retryable=True,
         )
@@ -215,7 +223,12 @@ def generate_outputs(
                     "transcript": generation_transcript,
                 },
             )
-            content = active_provider.generate(prompt)
+            try:
+                content = active_provider.generate(prompt)
+            except Exception as error:
+                if not _is_sensitive_llm_error(error):
+                    raise
+                content = _build_extractive_target_output(target, metadata, generation_transcript)
             output_path = metadata.task_dir / filename
             write_markdown(output_path, content)
             metadata.status = status
@@ -341,6 +354,8 @@ def _prepare_generation_transcript(
             summary_path.read_text(encoding="utf-8") if summary_path.exists() else ""
         )
         if existing_summary.strip():
+            if _looks_like_llm_refusal(existing_summary):
+                raise RuntimeError(f"Cached chunk summary is an LLM refusal: {summary_path}")
             summaries.append(existing_summary)
             continue
 
@@ -356,7 +371,14 @@ def _prepare_generation_transcript(
                 "transcript_chunk": chunk,
             },
         )
-        summary = provider.generate(prompt)
+        try:
+            summary = provider.generate(prompt)
+        except Exception as error:
+            if not _is_sensitive_llm_error(error):
+                raise
+            summary = _build_extractive_chunk_summary(metadata, index, chunk_count, chunk)
+        if _looks_like_llm_refusal(summary):
+            raise RuntimeError(f"LLM returned a refusal while summarizing chunk {index}/{chunk_count}.")
         write_markdown(summary_path, summary)
         summaries.append(summary)
 
@@ -369,6 +391,130 @@ def _prepare_generation_transcript(
         progress_callback=progress_callback,
     )
 
+
+
+
+
+def _is_sensitive_llm_error(error: Exception) -> bool:
+    if isinstance(error, LlmProviderError):
+        details = " ".join(
+            value
+            for value in [
+                error.provider_error_type,
+                error.provider_error_message,
+                error.response_body,
+                str(error),
+            ]
+            if value
+        ).lower()
+    else:
+        details = str(error).lower()
+    return "new_sensitive" in details or "sensitive" in details
+
+
+def _build_extractive_chunk_summary(
+    metadata: TaskMetadata,
+    chunk_index: int,
+    chunk_count: int,
+    chunk: str,
+) -> str:
+    excerpts = _extract_transcript_excerpts(chunk, limit=8)
+    lines = [
+        f"# 本地抽取式片段摘要 {chunk_index}/{chunk_count}",
+        "",
+        "LLM 摘要被供应商安全策略拦截，已改用本地抽取式摘要。",
+        "",
+        f"- 视频标题：{metadata.video.title or 'untitled'}",
+        f"- 平台：{metadata.platform}",
+        f"- 来源：{metadata.source_url}",
+        "",
+        "## 原文关键摘录",
+    ]
+    lines.extend(f"- {excerpt}" for excerpt in excerpts)
+    return "\n".join(lines).strip() + "\n"
+
+
+def _build_extractive_global_summary(metadata: TaskMetadata, summaries: list[str]) -> str:
+    excerpts = _extract_transcript_excerpts("\n".join(summaries), limit=12)
+    lines = [
+        "# 本地抽取式全局摘要",
+        "",
+        "LLM 全局摘要被供应商安全策略拦截，已改用局部摘要的本地抽取结果。",
+        "",
+        f"- 视频标题：{metadata.video.title or 'untitled'}",
+        f"- 平台：{metadata.platform}",
+        f"- 来源：{metadata.source_url}",
+        "",
+        "## 关键摘录",
+    ]
+    lines.extend(f"- {excerpt}" for excerpt in excerpts)
+    return "\n".join(lines).strip() + "\n"
+
+
+def _build_extractive_target_output(target: str, metadata: TaskMetadata, transcript: str) -> str:
+    excerpts = _extract_transcript_excerpts(transcript, limit=16)
+    title = metadata.video.title or "untitled"
+    lines = [
+        f"# {title}",
+        "",
+        f"> LLM 生成 `{target}` 时被供应商安全策略拦截，以下为本地抽取式草稿，可作为人工编辑底稿。",
+        "",
+        "## 基本信息",
+        f"- 平台：{metadata.platform}",
+        f"- 来源：{metadata.source_url}",
+        "",
+        "## 关键摘录",
+    ]
+    lines.extend(f"- {excerpt}" for excerpt in excerpts)
+    if target == "x_thread":
+        thread_lines = [f"{index + 1}. {excerpt}" for index, excerpt in enumerate(excerpts[:10])]
+        lines.extend(["", "## Thread 草稿", *thread_lines])
+    elif target == "x_titles":
+        lines.extend(["", "## 备选标题", f"- {title}"])
+    return "\n".join(lines).strip() + "\n"
+
+
+def _extract_transcript_excerpts(text: str, *, limit: int) -> list[str]:
+    excerpts: list[str] = []
+    for raw_line in text.splitlines():
+        cleaned = _clean_transcript_excerpt(raw_line)
+        if len(cleaned) < 12 or cleaned in excerpts:
+            continue
+        excerpts.append(cleaned)
+        if len(excerpts) >= limit:
+            break
+    if excerpts:
+        return excerpts
+
+    compact = _clean_transcript_excerpt(text)
+    if not compact:
+        return ["无可用摘录。"]
+    return [compact[:240]]
+
+
+def _clean_transcript_excerpt(text: str) -> str:
+    cleaned = re.sub(r"\[[0-9:.]+\s*-\s*[0-9:.]+\]", "", text)
+    cleaned = re.sub(r"[#>`*_\-]+", " ", cleaned)
+    cleaned = " ".join(cleaned.split())
+    return cleaned[:240]
+
+_LLM_REFUSAL_PATTERNS = (
+    "无法协助处理此内容",
+    "无法协助",
+    "无法处理此内容",
+    "不太了解",
+    "换个话题",
+    "can't assist",
+    "cannot assist",
+    "cannot help with",
+    "i'm sorry",
+    "i am sorry",
+)
+
+
+def _looks_like_llm_refusal(text: str) -> bool:
+    normalized = " ".join(text.lower().split())
+    return any(pattern in normalized for pattern in _LLM_REFUSAL_PATTERNS)
 
 def _build_generation_chunks(metadata: TaskMetadata, transcript: str, max_chars: int) -> list[str]:
     segments = _load_transcript_segments(metadata.task_dir / "transcript.segments.json")
@@ -456,7 +602,12 @@ def _prepare_global_summary(
             "chunk_summaries": combined_summaries,
         },
     )
-    global_summary = provider.generate(prompt)
+    try:
+        global_summary = provider.generate(prompt)
+    except Exception as error:
+        if not _is_sensitive_llm_error(error):
+            raise
+        global_summary = _build_extractive_global_summary(metadata, summaries)
     write_markdown(global_summary_path, global_summary)
     return global_summary
 
@@ -557,9 +708,45 @@ def _derived_generation_status(metadata: TaskMetadata, config: AppConfig) -> Tas
     return metadata.status
 
 
+class TranscriptQualityError(RuntimeError):
+    pass
+
+
+_CJK_RE = re.compile(r"[\u4e00-\u9fff]")
+_LATIN_WORD_RE = re.compile(r"[A-Za-z]{2,}")
+
+
+def _validate_transcript_quality(metadata: TaskMetadata, segments: list[TranscriptSegment]) -> None:
+    text = " ".join(segment.text.strip() for segment in segments if segment.text.strip())
+    if not text:
+        raise TranscriptQualityError("Transcript quality check failed: ASR returned no transcript text.")
+
+    latin_words = _LATIN_WORD_RE.findall(text.lower())
+    if len(latin_words) >= 100:
+        word_counts = Counter(latin_words)
+        top_word, top_count = word_counts.most_common(1)[0]
+        top_ratio = top_count / len(latin_words)
+        unique_ratio = len(word_counts) / len(latin_words)
+        if top_ratio >= 0.35 or unique_ratio <= 0.08:
+            raise TranscriptQualityError(
+                "Transcript quality check failed: ASR output is highly repetitive "
+                f"(top word '{top_word}' appears {top_ratio:.0%} of the time)."
+            )
+
+    if _is_chinese_source(metadata):
+        cjk_count = len(_CJK_RE.findall(text))
+        if cjk_count < 20 and len(latin_words) >= 80:
+            raise TranscriptQualityError(
+                "Transcript quality check failed: Chinese source produced almost no Chinese text. "
+                "The ASR model may be wrong for this video, or the audio may be damaged."
+            )
+
+
 def _build_transcriber(metadata: TaskMetadata, config: AppConfig) -> object:
-    if _is_chinese_source(metadata) and config.asr.chinese_provider == "funasr":
-        return FunASRTranscriber(model_name=config.asr.funasr_model)
+    if _is_chinese_source(metadata):
+        if config.asr.chinese_provider == "funasr":
+            return FunASRTranscriber(model_name=config.asr.funasr_model)
+        return FasterWhisperTranscriber(model_name=config.asr.faster_whisper_model)
     if metadata.platform == "youtube" and config.asr.english_provider == "mlx_whisper":
         return MlxWhisperTranscriber(model_name=config.asr.mlx_whisper_model)
     return FasterWhisperTranscriber(model_name=config.asr.faster_whisper_model)

@@ -43,6 +43,57 @@ def test_config_show_prints_effective_config():
     assert "openai_compatible" in result.output
 
 
+
+
+def test_draft_command_generates_x_engage_pack(monkeypatch, tmp_path):
+    class FakeDraftResult:
+        def __init__(self):
+            self.task_dir = tmp_path / "drafts" / "2026-05-11-test"
+            self.paths = [self.task_dir / "source.md", self.task_dir / "x_replies.md"]
+
+    calls = []
+
+    def fake_generate_draft(content, config, *, mode, x_url=None, output_dir=None, title=None, progress_callback=None):
+        calls.append((content, mode, x_url, output_dir, title))
+        if progress_callback:
+            progress_callback("Generating draft brief...")
+        return FakeDraftResult()
+
+    monkeypatch.setattr("video2post.cli.generate_draft", fake_generate_draft)
+
+    result = runner.invoke(
+        app,
+        [
+            "draft",
+            "一段收藏内容",
+            "--mode",
+            "x_engage",
+            "--x-url",
+            "https://x.com/big/status/1",
+            "--output",
+            str(tmp_path / "drafts"),
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert calls == [("一段收藏内容", "x_engage", "https://x.com/big/status/1", tmp_path / "drafts", None)]
+    assert "Draft directory:" in result.output
+    assert "Progress: Generating draft brief..." in result.output
+    assert "Generated:" in result.output
+
+
+def test_draft_command_reports_generation_failure(monkeypatch):
+    def fake_generate_draft(*args, **kwargs):
+        raise RuntimeError("viral_280 output exceeds 280 characters")
+
+    monkeypatch.setattr("video2post.cli.generate_draft", fake_generate_draft)
+
+    result = runner.invoke(app, ["draft", "一段收藏内容", "--mode", "viral_280"])
+
+    assert result.exit_code == 1
+    assert "viral_280 output exceeds 280 characters" in result.output
+
+
 def test_samples_command_lists_builtin_regression_cases():
     result = runner.invoke(app, ["samples"])
 

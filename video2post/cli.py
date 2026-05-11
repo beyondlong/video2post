@@ -7,6 +7,7 @@ import typer
 
 from video2post.config import config_to_dict, load_config
 from video2post.doctor import DoctorStatus, collect_doctor_checks
+from video2post.drafts import generate_draft
 from video2post.downloader.ytdlp import detect_platform
 from video2post.downloader.ytdlp import YtDlpDownloader
 from video2post.formatters.models import parse_platforms
@@ -269,6 +270,50 @@ def retry(
 
     if not did_work:
         typer.echo("Nothing to retry.")
+
+
+@app.command("draft")
+def draft_command(
+    content: Annotated[str, typer.Argument(help="Raw text content to turn into X draft material.")],
+    config: Annotated[
+        Path | None,
+        typer.Option("--config", "-c", help="Path to config.yaml."),
+    ] = None,
+    mode: Annotated[
+        str,
+        typer.Option("--mode", help="Draft mode: x_engage or viral_280."),
+    ] = "x_engage",
+    x_url: Annotated[
+        str | None,
+        typer.Option("--x-url", help="Optional X URL saved as context; the page is not fetched."),
+    ] = None,
+    output: Annotated[
+        Path | None,
+        typer.Option("--output", "-o", help="Output draft directory root. Defaults to ./drafts."),
+    ] = None,
+    title: Annotated[
+        str | None,
+        typer.Option("--title", help="Optional title used for the local draft directory slug."),
+    ] = None,
+) -> None:
+    """Turn pasted raw material into X-ready draft content."""
+    loaded_config = load_config(config)
+    try:
+        result = generate_draft(
+            content,
+            loaded_config,
+            mode=mode,
+            x_url=x_url,
+            output_dir=output,
+            title=title,
+            progress_callback=_echo_progress,
+        )
+    except (ValueError, RuntimeError) as error:
+        typer.echo(str(error))
+        raise typer.Exit(code=1) from error
+
+    typer.echo(f"Draft directory: {result.task_dir}")
+    _echo_generated_paths(result.paths)
 
 
 @app.command("format")

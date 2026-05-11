@@ -73,7 +73,32 @@ video2post process "VIDEO_URL" --generate --targets cover --cover-at 00:00:30
 video2post generate TASK_DIR --targets cover --cover-at 00:00:30
 ```
 
-### 7. 对已有任务重新生成内容
+### 7. 日常素材生成 X 草稿
+
+把日常想法、读书笔记、聊天内容或手动粘贴的 X 原推正文改写成 X 发布素材：
+
+```bash
+video2post draft "原始内容" --mode x_engage --x-url "https://x.com/user/status/123"
+```
+
+`x_engage` 会在 `drafts/YYYY-MM-DD-.../` 下生成：
+
+- `source.md`
+- `brief.md`
+- `x_replies.md`
+- `x_quote.md`
+- `x_posts.md`
+- `meta.json`
+
+如果只想生成一条 280 字符以内的爆款短推：
+
+```bash
+video2post draft "原始内容" --mode viral_280
+```
+
+`--x-url` 只作为上下文保存，不会自动抓取 X 页面，也不会自动发布。
+
+### 8. 对已有任务重新生成内容
 
 ```bash
 video2post generate TASK_DIR --targets notes,x_article,x_thread,x_titles,publish_formats
@@ -87,7 +112,7 @@ video2post generate TASK_DIR --targets x_article,x_thread,x_titles
 video2post generate TASK_DIR --targets article,script,titles
 ```
 
-### 8. 失败后继续跑
+### 9. 失败后继续跑
 
 如果音频或转写已经存在，只想补后续缺失步骤：
 
@@ -95,7 +120,7 @@ video2post generate TASK_DIR --targets article,script,titles
 video2post retry TASK_DIR --generate --targets notes,x_article
 ```
 
-### 9. 单独把 Markdown 转发布格式
+### 10. 单独把 Markdown 转发布格式
 
 普通 Markdown 文件：
 
@@ -150,6 +175,32 @@ video2post process URL [OPTIONS]
 | `--cleanup-source / --keep-source` | 配置中的 `app.cleanup_source` | 音频规范化后是否删除压缩源文件。 |
 
 注意：`--fast` 只在 `process` 命令中生效。它不会改变 `generate TASK_DIR` 的行为。
+
+### `draft`
+
+把命令行粘贴的原始文本改写成 X 草稿。
+
+```bash
+video2post draft "原始内容" --mode x_engage
+video2post draft "原始内容" --mode viral_280
+```
+
+参数：
+
+| 参数 | 默认值 | 说明 |
+| --- | --- | --- |
+| `--config -c PATH` | `config.yaml` | 指定配置文件。 |
+| `--mode TEXT` | `x_engage` | 草稿模式：`x_engage` 或 `viral_280`。 |
+| `--x-url TEXT` | 空 | 可选 X 链接，仅保存为上下文，不自动读取页面。 |
+| `--output -o PATH` | `./drafts` | 草稿库根目录。 |
+| `--title TEXT` | 空 | 用于生成本地目录名的标题。 |
+
+输出：
+
+- `x_engage`：`source.md`、`brief.md`、`x_replies.md`、`x_quote.md`、`x_posts.md`、`meta.json`。
+- `viral_280`：`source.md`、`brief.md`、`viral_280.md`、`meta.json`。
+
+`viral_280.md` 会做本地 280 字符校验，超长时任务标记失败，不写入超长推文。
 
 ### `generate`
 

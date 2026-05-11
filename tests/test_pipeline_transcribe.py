@@ -219,3 +219,83 @@ def test_transcribe_audio_uses_mlx_whisper_for_youtube_when_configured(monkeypat
 
     assert transcript_path == tmp_path / "transcript.en.md"
     assert loaded.asr_model == "mlx-community/whisper-tiny"
+
+
+def test_transcribe_audio_uses_chinese_provider_for_chinese_youtube(monkeypatch, tmp_path):
+    audio = tmp_path / "audio.wav"
+    audio.write_text("audio", encoding="utf-8")
+    metadata = TaskMetadata(
+        source_url="https://youtu.be/test",
+        platform="youtube",
+        task_dir=tmp_path,
+        video=VideoMetadata(title="中文 YouTube"),
+        source_language="zh",
+    )
+    write_metadata(metadata)
+
+    class FakeFasterWhisperTranscriber:
+        def __init__(self, *, model_name):
+            self.model_name = model_name
+
+        def transcribe(self, audio_path, *, language=None):
+            return [
+                TranscriptSegment(start=0, end=1, text="这里是中文内容。", language=language or "zh"),
+            ]
+
+    class FailMlxWhisperTranscriber:
+        def __init__(self, *, model_name):
+            raise AssertionError("Chinese YouTube should not use the English MLX provider")
+
+    monkeypatch.setattr("video2post.pipeline.FasterWhisperTranscriber", FakeFasterWhisperTranscriber)
+    monkeypatch.setattr("video2post.pipeline.MlxWhisperTranscriber", FailMlxWhisperTranscriber)
+    config = AppConfig.model_validate(
+        {
+            "asr": {
+                "english_provider": "mlx_whisper",
+                "mlx_whisper_model": "mlx-community/whisper-base.en-mlx",
+                "faster_whisper_model": "medium",
+            }
+        }
+    )
+
+    transcript_path = transcribe_audio(tmp_path / "meta.json", config)
+    loaded = read_metadata(tmp_path / "meta.json")
+
+    assert transcript_path == tmp_path / "transcript.zh.md"
+    assert loaded.asr_model == "medium"
+
+
+def test_transcribe_audio_rejects_repetitive_hallucinated_transcript(tmp_path):
+    audio = tmp_path / "audio.wav"
+    audio.write_text("audio", encoding="utf-8")
+    metadata = TaskMetadata(
+        source_url="https://youtu.be/test",
+        platform="youtube",
+        task_dir=tmp_path,
+        video=VideoMetadata(title="中文 YouTube"),
+        source_language="zh",
+    )
+    write_metadata(metadata)
+
+    class RepetitiveTranscriber:
+        model_name = "fake-bad-asr"
+
+        def transcribe(self, audio_path, *, language=None):
+            return [
+                TranscriptSegment(start=0, end=1, text=("ankle " * 160).strip(), language=language),
+                TranscriptSegment(start=1, end=2, text=("and the " * 40).strip(), language=language),
+            ]
+
+    try:
+        transcribe_audio(tmp_path / "meta.json", AppConfig(), transcriber=RepetitiveTranscriber())
+    except RuntimeError as error:
+        assert "Transcript quality check failed" in str(error)
+    else:
+        raise AssertionError("Expected low-quality transcript to be rejected")
+
+    loaded = read_metadata(tmp_path / "meta.json")
+    assert loaded.status == TaskStatus.FAILED
+    assert loaded.error is not None
+    assert loaded.error.stage == "transcription_quality"
+    assert loaded.error.retryable is True
+    assert not (tmp_path / "transcript.zh.md").exists()

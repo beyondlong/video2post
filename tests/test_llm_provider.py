@@ -4,7 +4,7 @@ import httpx
 from pathlib import Path
 
 from video2post.config import LlmSettings
-from video2post.llm.openai_compatible import OpenAICompatibleProvider
+from video2post.llm.openai_compatible import LlmProviderError, OpenAICompatibleProvider
 
 
 class FakeResponse:
@@ -42,6 +42,29 @@ class FakeHttpClient:
                 ]
             }
         )
+
+
+
+
+class HttpErrorResponse:
+    text = '{"error":{"type":"unprocessable_entity_error","message":"prompt rejected"}}'
+
+    def raise_for_status(self):
+        request = httpx.Request("POST", "https://llm.example.com/v1/chat/completions")
+        response = httpx.Response(422, request=request, text=self.text)
+        raise httpx.HTTPStatusError("unprocessable", request=request, response=response)
+
+    def json(self):
+        return {}
+
+
+class HttpErrorClient:
+    def __init__(self):
+        self.requests = []
+
+    def post(self, url, *, headers, json, timeout):
+        self.requests.append({"url": url, "headers": headers, "json": json, "timeout": timeout})
+        return HttpErrorResponse()
 
 
 class FlakyHttpClient:
@@ -244,3 +267,26 @@ def test_openai_compatible_provider_loads_dotenv_fallbacks(tmp_path, monkeypatch
     assert request["headers"]["Authorization"] == "Bearer dotenv-key"
     assert request["json"]["model"] == "dotenv-model"
     assert provider.model_name == "dotenv-model"
+
+
+def test_openai_compatible_provider_includes_http_error_body(monkeypatch):
+    monkeypatch.setenv("VIDEO2POST_LLM_API_KEY", "test-key")
+    client = HttpErrorClient()
+    provider = OpenAICompatibleProvider(
+        settings=LlmSettings(base_url="https://llm.example.com/v1", model="test-model"),
+        http_client=client,
+    )
+
+    try:
+        provider.generate("Hello prompt")
+    except LlmProviderError as error:
+        message = str(error)
+        assert error.status_code == 422
+        assert error.provider_error_type == "unprocessable_entity_error"
+        assert error.provider_error_message == "prompt rejected"
+    else:
+        raise AssertionError("Expected HTTP error body to be surfaced")
+
+    assert "422" in message
+    assert "prompt rejected" in message
+    assert len(client.requests) == 1

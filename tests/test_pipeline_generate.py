@@ -1,5 +1,6 @@
 from video2post.config import AppConfig
 from video2post.models import TaskMetadata, TaskStatus, TranscriptSegment, VideoMetadata
+from video2post.llm.openai_compatible import LlmProviderError
 from video2post.pipeline import generate_outputs
 from video2post.writers.metadata import read_metadata, write_metadata
 from video2post.writers.transcript import write_transcript_segments
@@ -21,6 +22,38 @@ class FailingProvider:
 
     def generate(self, prompt):
         raise RuntimeError("llm unavailable")
+
+
+
+
+class RefusalProvider:
+    model_name = "refusal-llm"
+
+    def generate(self, prompt):
+        return "很抱歉，我无法协助处理此内容。"
+
+
+
+
+class SensitiveThenFakeProvider:
+    model_name = "sensitive-then-fake-llm"
+
+    def __init__(self, sensitive_calls=1):
+        self.sensitive_calls = sensitive_calls
+        self.prompts = []
+
+    def generate(self, prompt):
+        self.prompts.append(prompt)
+        if self.sensitive_calls > 0:
+            self.sensitive_calls -= 1
+            raise LlmProviderError(
+                "LLM request failed with HTTP 422: output new_sensitive (1027)",
+                status_code=422,
+                response_body='{"type":"error","error":{"message":"output new_sensitive (1027)"}}',
+                provider_error_type="unprocessable_entity_error",
+                provider_error_message="output new_sensitive (1027)",
+            )
+        return f"Generated from: {prompt.splitlines()[0]}"
 
 
 class FakeCoverDownloader:
@@ -822,3 +855,142 @@ def test_generate_outputs_records_failure_when_chunk_summary_fails(tmp_path):
     assert loaded.status == TaskStatus.FAILED
     assert loaded.error.stage == "llm_generation"
     assert loaded.error.retryable is True
+
+
+def test_generate_outputs_rejects_new_refusal_summary(tmp_path):
+    metadata = TaskMetadata(
+        source_url="https://youtu.be/test",
+        platform="youtube",
+        task_dir=tmp_path,
+        video=VideoMetadata(title="Long Video"),
+    )
+    write_metadata(metadata)
+    (tmp_path / "transcript.en.md").write_text(
+        "paragraph one has enough text\n\nparagraph two has enough text",
+        encoding="utf-8",
+    )
+    prompt_dir = tmp_path / "prompts"
+    prompt_dir.mkdir()
+    (prompt_dir / "chunk_summary.md").write_text("summarize {{ transcript_chunk }}", encoding="utf-8")
+    (prompt_dir / "notes.md").write_text("notes {{ transcript }}", encoding="utf-8")
+
+    try:
+        generate_outputs(
+            tmp_path / "meta.json",
+            AppConfig.model_validate({"generation": {"chunk_max_chars": 35}}),
+            provider=RefusalProvider(),
+            prompt_dir=prompt_dir,
+            targets=["notes"],
+        )
+    except RuntimeError as error:
+        assert "LLM returned a refusal" in str(error)
+    else:
+        raise AssertionError("Expected refusal summary to be rejected")
+
+    loaded = read_metadata(tmp_path / "meta.json")
+    assert loaded.status == TaskStatus.FAILED
+    assert loaded.error.stage == "llm_generation"
+    assert not (tmp_path / "summaries" / "chunk-001.summary.md").exists()
+
+
+def test_generate_outputs_rejects_cached_refusal_summary(tmp_path):
+    metadata = TaskMetadata(
+        source_url="https://youtu.be/test",
+        platform="youtube",
+        task_dir=tmp_path,
+        video=VideoMetadata(title="Long Video"),
+    )
+    write_metadata(metadata)
+    (tmp_path / "transcript.en.md").write_text(
+        "paragraph one has enough text\n\nparagraph two has enough text",
+        encoding="utf-8",
+    )
+    summary_dir = tmp_path / "summaries"
+    summary_dir.mkdir()
+    (summary_dir / "chunk-001.summary.md").write_text(
+        "抱歉，我对您提到的这个视频内容不太了解。建议我们换个话题聊聊吧。",
+        encoding="utf-8",
+    )
+    prompt_dir = tmp_path / "prompts"
+    prompt_dir.mkdir()
+    (prompt_dir / "chunk_summary.md").write_text("summarize {{ transcript_chunk }}", encoding="utf-8")
+    (prompt_dir / "notes.md").write_text("notes {{ transcript }}", encoding="utf-8")
+
+    try:
+        generate_outputs(
+            tmp_path / "meta.json",
+            AppConfig.model_validate({"generation": {"chunk_max_chars": 35}}),
+            provider=FakeProvider(),
+            prompt_dir=prompt_dir,
+            targets=["notes"],
+        )
+    except RuntimeError as error:
+        assert "Cached chunk summary is an LLM refusal" in str(error)
+    else:
+        raise AssertionError("Expected cached refusal summary to be rejected")
+
+    loaded = read_metadata(tmp_path / "meta.json")
+    assert loaded.status == TaskStatus.FAILED
+    assert loaded.error.stage == "llm_generation"
+
+
+def test_generate_outputs_falls_back_to_extractive_chunk_summary_on_sensitive_error(tmp_path):
+    metadata = TaskMetadata(
+        source_url="https://youtu.be/test",
+        platform="youtube",
+        task_dir=tmp_path,
+        video=VideoMetadata(title="Sensitive Video"),
+    )
+    write_metadata(metadata)
+    (tmp_path / "transcript.en.md").write_text(
+        "first paragraph has enough source detail\n\nsecond paragraph has enough source detail",
+        encoding="utf-8",
+    )
+    prompt_dir = tmp_path / "prompts"
+    prompt_dir.mkdir()
+    (prompt_dir / "chunk_summary.md").write_text("summarize {{ transcript_chunk }}", encoding="utf-8")
+    (prompt_dir / "notes.md").write_text("notes {{ transcript }}", encoding="utf-8")
+    provider = SensitiveThenFakeProvider(sensitive_calls=1)
+
+    outputs = generate_outputs(
+        tmp_path / "meta.json",
+        AppConfig.model_validate({"generation": {"chunk_max_chars": 35}}),
+        provider=provider,
+        prompt_dir=prompt_dir,
+        targets=["notes"],
+    )
+
+    summary_text = (tmp_path / "summaries" / "chunk-001.summary.md").read_text(encoding="utf-8")
+    assert outputs == [tmp_path / "notes.md"]
+    assert "本地抽取式片段摘要" in summary_text
+    assert "first paragraph has enough source detail" in summary_text
+    assert (tmp_path / "notes.md").exists()
+
+
+def test_generate_outputs_falls_back_to_extractive_target_on_sensitive_error(tmp_path):
+    metadata = TaskMetadata(
+        source_url="https://youtu.be/test",
+        platform="youtube",
+        task_dir=tmp_path,
+        video=VideoMetadata(title="Sensitive Video"),
+    )
+    write_metadata(metadata)
+    (tmp_path / "transcript.en.md").write_text("source detail that should be preserved", encoding="utf-8")
+    prompt_dir = tmp_path / "prompts"
+    prompt_dir.mkdir()
+    (prompt_dir / "notes.md").write_text("notes {{ transcript }}", encoding="utf-8")
+
+    outputs = generate_outputs(
+        tmp_path / "meta.json",
+        AppConfig(),
+        provider=SensitiveThenFakeProvider(sensitive_calls=1),
+        prompt_dir=prompt_dir,
+        targets=["notes"],
+    )
+
+    content = (tmp_path / "notes.md").read_text(encoding="utf-8")
+    assert outputs == [tmp_path / "notes.md"]
+    assert "本地抽取式草稿" in content
+    assert "source detail that should be preserved" in content
+    loaded = read_metadata(tmp_path / "meta.json")
+    assert loaded.status == TaskStatus.NOTES_GENERATED

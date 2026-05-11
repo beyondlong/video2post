@@ -115,6 +115,8 @@ video2post process URL --cleanup-source
 video2post process URL --no-transcribe
 video2post process URL --lang zh
 video2post process URL --no-download
+video2post draft "原始内容" --mode x_engage
+video2post draft "原始内容" --mode viral_280
 ```
 
 LLM 相关配置既可以放在 `.env`，也可以放在 `config.yaml`：
@@ -142,6 +144,17 @@ python3 -m video2post.cli process "YOUTUBE_URL" --lang zh --generate
 ```
 
 这会输出 `transcript.zh.md`，并跳过英文翻译目标，直接基于中文转写稿生成内容素材和发布格式。
+
+### 日常素材出稿
+
+除了处理视频链接，也可以把日常想法、读书笔记、聊天内容或手动粘贴的 X 原推正文直接改写成 X 草稿：
+
+```bash
+video2post draft "原始内容" --mode x_engage --x-url "https://x.com/user/status/123"
+video2post draft "原始内容" --mode viral_280
+```
+
+`x_engage` 会生成回复候选、引用转发候选和独立短帖候选；`viral_280` 会生成一条 280 字符以内的短推。X 链接只作为上下文保存，不会自动抓取页面或自动发布。
 
 ### 快速出稿模式
 
