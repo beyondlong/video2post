@@ -251,8 +251,8 @@ video2post format article.md --platform wechat,x --output ./publish
 
 | 参数 | 默认值 | 说明 |
 | --- | --- | --- |
-| `--platform TEXT` | `wechat,x` | 发布平台，目前支持 `wechat` 和 `x`。 |
-| `--output -o PATH` | 输入文件所在目录 | 输出目录。 |
+| `--platform TEXT` / 位置参数 | `wechat,x` | 发布平台，目前支持 `wechat` 和 `x`。例如 `video2post format article.md wechat,x`。 |
+| `--output -o -output PATH` | 输入文件所在目录 | 输出目录。 |
 | `--rewrite` | false | 预留的 LLM 重写开关；当前 deterministic 格式化建议不使用。 |
 
 ### `format` for task directories
@@ -269,7 +269,7 @@ video2post format TASK_DIR --source x_article --platform wechat,x
 | --- | --- | --- |
 | `--source TEXT` | 平台默认源 | 可选 `article`、`x_article`、`notes`、`transcript`。 |
 | `--platform TEXT` | `wechat,x` | 发布平台。 |
-| `--output -o PATH` | 任务目录 | 输出目录。 |
+| `--output -o -output PATH` | 任务目录 | 输出目录。 |
 | `--rewrite` | false | 预留的 LLM 重写开关。 |
 
 默认源规则：

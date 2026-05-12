@@ -1006,6 +1006,33 @@ def test_format_command_writes_selected_platform_outputs(tmp_path):
     assert (tmp_path / "article.x.txt").exists()
 
 
+def test_format_command_accepts_platform_as_positional_argument(tmp_path):
+    input_path = tmp_path / "article.md"
+    input_path.write_text("# Title", encoding="utf-8")
+
+    result = runner.invoke(app, ["format", str(input_path), "x"])
+
+    assert result.exit_code == 0
+    assert (tmp_path / "article.x.md").exists()
+    assert (tmp_path / "article.x.txt").exists()
+    assert not (tmp_path / "article.wechat.html").exists()
+
+
+def test_format_command_accepts_single_dash_output_alias(tmp_path):
+    input_path = tmp_path / "article.md"
+    output_dir = tmp_path / "publish"
+    input_path.write_text("# Title", encoding="utf-8")
+
+    result = runner.invoke(
+        app,
+        ["format", str(input_path), "wechat", "-output", str(output_dir)],
+    )
+
+    assert result.exit_code == 0
+    assert (output_dir / "article.wechat.md").exists()
+    assert (output_dir / "article.wechat.html").exists()
+
+
 def test_format_command_rejects_unknown_platform(tmp_path):
     input_path = tmp_path / "article.md"
     input_path.write_text("# Title", encoding="utf-8")

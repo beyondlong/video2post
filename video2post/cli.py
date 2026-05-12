@@ -329,6 +329,10 @@ def draft_command(
 @app.command("format")
 def format_command(
     input_path: Annotated[Path, typer.Argument(help="Markdown file or existing task directory to format.")],
+    platform_arg: Annotated[
+        str | None,
+        typer.Argument(help="Optional platform shortcut, e.g. wechat,x."),
+    ] = None,
     source: Annotated[
         str | None,
         typer.Option("--source", help="Task artifact source when formatting a task directory: article,x_article,notes,transcript."),
@@ -339,7 +343,7 @@ def format_command(
     ] = "wechat,x",
     output: Annotated[
         Path | None,
-        typer.Option("--output", "-o", help="Output directory."),
+        typer.Option("--output", "-o", "-output", help="Output directory."),
     ] = None,
     rewrite: Annotated[
         bool,
@@ -354,7 +358,7 @@ def format_command(
     Platforms: wechat,x. WeChat writes *.wechat.md/html; X writes *.x.md/txt.
     """
     try:
-        platforms = parse_platforms(platform)
+        platforms = parse_platforms(platform_arg or platform)
         if input_path.is_dir():
             result = format_task_artifacts(
                 input_path,

@@ -429,6 +429,7 @@ segments:
 
 ```bash
 video2post format article.md --platform wechat,x
+video2post format article.md wechat,x
 video2post format article.md --platform wechat --output ./publish-ready
 ```
 
