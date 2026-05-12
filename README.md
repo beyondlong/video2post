@@ -62,13 +62,13 @@ python3 -m video2post.cli doctor
 5. 跑一个最小样例
 
 ```bash
-video2post process "https://www.youtube.com/watch?v=474wZZHoWN4" --output ./outputs-check --generate --targets notes,titles --cleanup-source
+video2post video "https://www.youtube.com/watch?v=474wZZHoWN4" --output ./outputs-check --generate --targets notes,titles --cleanup-source
 ```
 
 如果你当前 shell 里的 `video2post` 还没指向这个仓库，可以改用：
 
 ```bash
-python3 -m video2post.cli process "https://www.youtube.com/watch?v=474wZZHoWN4" --output ./outputs-check --generate --targets notes,titles --cleanup-source
+python3 -m video2post.cli video "https://www.youtube.com/watch?v=474wZZHoWN4" --output ./outputs-check --generate --targets notes,titles --cleanup-source
 ```
 
 ## 核心目标
@@ -83,7 +83,7 @@ python3 -m video2post.cli process "https://www.youtube.com/watch?v=474wZZHoWN4" 
 
 ## 第一版形态
 
-第一版采用 CLI-first 路线，暂定命令名：
+第一版采用 CLI-first 路线，推荐命令名：
 
 ```bash
 video2post
@@ -92,8 +92,8 @@ video2post
 示例用法：
 
 ```bash
-video2post process "https://www.youtube.com/watch?v=xxxx"
-video2post process "https://www.bilibili.com/video/BVxxxx"
+video2post video "https://www.youtube.com/watch?v=xxxx"
+video2post video "https://www.bilibili.com/video/BVxxxx"
 ```
 
 如果当前 shell 里的 `video2post` 命令还没有正确绑定到这个仓库，也可以先用：
@@ -106,15 +106,15 @@ python3 -m video2post.cli samples
 可选参数方向：
 
 ```bash
-video2post process URL --output ./outputs
-video2post process URL --fast
-video2post process URL --generate --targets x_article,x_thread,x_titles
-video2post process URL --lang zh --generate
-video2post process URL --generate --targets cover --cover-at 00:00:30
-video2post process URL --cleanup-source
-video2post process URL --no-transcribe
-video2post process URL --lang zh
-video2post process URL --no-download
+video2post video URL --output ./outputs
+video2post video URL --fast
+video2post video URL --generate --targets x_article,x_thread,x_titles
+video2post video URL --lang zh --generate
+video2post video URL --generate --targets cover --cover-at 00:00:30
+video2post video URL --cleanup-source
+video2post video URL --no-transcribe
+video2post video URL --lang zh
+video2post video URL --no-download
 video2post draft "原始内容" --mode x_engage
 video2post draft "原始内容" --mode viral_280
 video2post draft --x-url "https://x.com/user/status/123"
@@ -141,7 +141,7 @@ asr:
 如果 YouTube 视频本身是中文，可以显式指定中文链路：
 
 ```bash
-python3 -m video2post.cli process "YOUTUBE_URL" --lang zh --generate
+python3 -m video2post.cli video "YOUTUBE_URL" --lang zh --generate
 ```
 
 这会输出 `transcript.zh.md`，并跳过英文翻译目标，直接基于中文转写稿生成内容素材和发布格式。
@@ -163,7 +163,7 @@ video2post draft "原始内容" --mode viral_280
 如果你只是想尽快拿到一版可编辑、可发布的二创草稿，可以使用 `--fast`：
 
 ```bash
-video2post process URL --fast
+video2post video URL --fast
 ```
 
 `--fast` 会自动开启生成，不需要额外传 `--generate`。在未显式传 `--targets` 时，它只生成快速出稿所需的核心产物：`notes`、`x_article`、`x_thread`、`x_titles`、`publish_formats`。它会跳过标准模式默认的 `translation`、`article`、`script`、`titles`，因此更适合个人创作者先快速判断内容是否值得继续精修。
@@ -171,7 +171,7 @@ video2post process URL --fast
 如果你在 `--fast` 下显式传了 `--targets`，系统会尊重你的选择：
 
 ```bash
-video2post process URL --fast --targets notes,x_article
+video2post video URL --fast --targets notes,x_article
 ```
 
 ## 处理流程
@@ -270,13 +270,13 @@ outputs/
 - 失败时能记录失败阶段和错误信息。
 - 已完成阶段可以跳过，支持后续重跑和重新生成二创内容。
 
-第一版最小命令集：
+当前推荐命令集：
 
 ```bash
-video2post process URL
-video2post retry TASK_DIR
-video2post generate TASK_DIR --targets x_article,x_thread,x_titles
-video2post generate TASK_DIR --targets cover --cover-at 00:00:30
+video2post video URL
+video2post task retry TASK_DIR
+video2post task generate TASK_DIR --targets x_article,x_thread,x_titles
+video2post task generate TASK_DIR --targets cover --cover-at 00:00:30
 video2post doctor
 video2post samples
 video2post config show
@@ -435,7 +435,7 @@ video2post format article.md --platform wechat --output ./publish-ready
 也可以转换已有 task 目录中的产物：
 
 ```bash
-video2post format-task ./outputs/2026-... --source article --platform wechat,x
+video2post format ./outputs/2026-... --source article --platform wechat,x
 ```
 
 生成文件包括：

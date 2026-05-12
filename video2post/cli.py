@@ -34,7 +34,9 @@ app = typer.Typer(
     no_args_is_help=True,
 )
 config_app = typer.Typer(help="Inspect and validate local configuration.")
+task_app = typer.Typer(help="Manage existing video2post task directories.")
 app.add_typer(config_app, name="config")
+app.add_typer(task_app, name="task")
 
 
 @app.callback()
@@ -42,8 +44,8 @@ def main() -> None:
     """video2post command line interface."""
 
 
-@app.command()
-def process(
+@app.command("video")
+def video_command(
     url: Annotated[str, typer.Argument(help="YouTube or Bilibili video URL.")],
     config: Annotated[
         Path | None,
@@ -169,8 +171,8 @@ def process(
         _handle_cli_process_error(error, platform=platform)
 
 
-@app.command("generate")
-def generate_command(
+@task_app.command("generate")
+def task_generate_command(
     task_dir: Annotated[Path, typer.Argument(help="Existing video2post task directory.")],
     config: Annotated[
         Path | None,
@@ -207,8 +209,8 @@ def generate_command(
     _echo_generated_paths(generated_paths)
 
 
-@app.command()
-def retry(
+@task_app.command("retry")
+def task_retry_command(
     task_dir: Annotated[Path, typer.Argument(help="Existing video2post task directory.")],
     config: Annotated[
         Path | None,
@@ -326,7 +328,11 @@ def draft_command(
 
 @app.command("format")
 def format_command(
-    input_path: Annotated[Path, typer.Argument(help="Markdown file to format.")],
+    input_path: Annotated[Path, typer.Argument(help="Markdown file or existing task directory to format.")],
+    source: Annotated[
+        str | None,
+        typer.Option("--source", help="Task artifact source when formatting a task directory: article,x_article,notes,transcript."),
+    ] = None,
     platform: Annotated[
         str,
         typer.Option("--platform", help="Comma-separated platforms: wechat,x. WeChat writes *.wechat.md/html; X writes *.x.md/txt."),
@@ -343,68 +349,35 @@ def format_command(
         ),
     ] = False,
 ) -> None:
-    """Format a Markdown file for publishing platforms.
+    """Format a Markdown file or task directory for publishing platforms.
 
     Platforms: wechat,x. WeChat writes *.wechat.md/html; X writes *.x.md/txt.
     """
     try:
         platforms = parse_platforms(platform)
-        result = format_markdown_file(
-            input_path,
-            platforms=platforms,
-            output_dir=output,
-            rewrite=rewrite,
-        )
-    except ValueError as error:
-        typer.echo(str(error))
-        raise typer.Exit(code=1) from error
-    _echo_generated_paths(result.paths)
-
-
-@app.command("format-task")
-def format_task_command(
-    task_dir: Annotated[Path, typer.Argument(help="Existing video2post task directory.")],
-    source: Annotated[
-        str | None,
-        typer.Option("--source", help="Task artifact source: article,x_article,notes,transcript. WeChat uses article then x_article by default; X uses x_article then article."),
-    ] = None,
-    platform: Annotated[
-        str,
-        typer.Option("--platform", help="Comma-separated platforms: wechat,x. WeChat writes *.wechat.md/html; X writes *.x.md/txt."),
-    ] = "wechat,x",
-    output: Annotated[
-        Path | None,
-        typer.Option("--output", "-o", help="Output directory."),
-    ] = None,
-    rewrite: Annotated[
-        bool,
-        typer.Option(
-            "--rewrite",
-            help="Reserved LLM rewrite step before formatting; deterministic formatting usually does not need it.",
-        ),
-    ] = False,
-) -> None:
-    """Format existing task artifacts for publishing platforms.
-
-    Sources: article,x_article,notes,transcript. WeChat uses article then x_article by default; X uses x_article then article.
-    """
-    try:
-        platforms = parse_platforms(platform)
-        result = format_task_artifacts(
-            task_dir,
-            platforms=platforms,
-            source=source,
-            output_dir=output,
-            rewrite=rewrite,
-        )
+        if input_path.is_dir():
+            result = format_task_artifacts(
+                input_path,
+                platforms=platforms,
+                source=source,
+                output_dir=output,
+                rewrite=rewrite,
+            )
+        else:
+            result = format_markdown_file(
+                input_path,
+                platforms=platforms,
+                output_dir=output,
+                rewrite=rewrite,
+            )
     except (ValueError, FileNotFoundError) as error:
         typer.echo(str(error))
         raise typer.Exit(code=1) from error
     _echo_generated_paths(result.paths)
 
 
-@app.command("tasks")
-def list_tasks(
+@task_app.command("list")
+def task_list_command(
     config: Annotated[
         Path | None,
         typer.Option("--config", "-c", help="Path to config.yaml."),

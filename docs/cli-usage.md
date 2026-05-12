@@ -9,7 +9,7 @@
 适合创作者先快速拿到一版可编辑稿件。
 
 ```bash
-video2post process "VIDEO_URL" --fast --cleanup-source
+video2post video "VIDEO_URL" --fast --cleanup-source
 ```
 
 `--fast` 会自动开启生成，不需要再加 `--generate`。默认生成：
@@ -24,7 +24,7 @@ video2post process "VIDEO_URL" --fast --cleanup-source
 如果只想要部分产物：
 
 ```bash
-video2post process "VIDEO_URL" --fast --targets notes,x_article
+video2post video "VIDEO_URL" --fast --targets notes,x_article
 ```
 
 ### 2. 标准完整处理
@@ -32,7 +32,7 @@ video2post process "VIDEO_URL" --fast --targets notes,x_article
 适合需要完整中间稿和多种内容形态的场景。
 
 ```bash
-video2post process "VIDEO_URL" --generate --cleanup-source
+video2post video "VIDEO_URL" --generate --cleanup-source
 ```
 
 标准默认 targets 来自 `config.yaml` 的 `generation.default_targets`。默认包含 `translation`、`notes`、X 产物、通用长文、脚本、标题和发布格式。
@@ -40,7 +40,7 @@ video2post process "VIDEO_URL" --generate --cleanup-source
 ### 3. 只下载和转写，不生成内容
 
 ```bash
-video2post process "VIDEO_URL" --output ./outputs-check
+video2post video "VIDEO_URL" --output ./outputs-check
 ```
 
 这会创建任务目录、下载音频、生成转写稿，但不会调用 LLM 生成二创内容。
@@ -50,7 +50,7 @@ video2post process "VIDEO_URL" --output ./outputs-check
 YouTube 默认按英文链路处理。如果视频本身是中文，加 `--lang zh`：
 
 ```bash
-video2post process "YOUTUBE_URL" --lang zh --fast --cleanup-source
+video2post video "YOUTUBE_URL" --lang zh --fast --cleanup-source
 ```
 
 这会输出 `transcript.zh.md`，并跳过英文翻译默认目标。
@@ -58,19 +58,19 @@ video2post process "YOUTUBE_URL" --lang zh --fast --cleanup-source
 ### 5. 指定输出目录
 
 ```bash
-video2post process "VIDEO_URL" --output ./outputs-check --fast
+video2post video "VIDEO_URL" --output ./outputs-check --fast
 ```
 
 ### 6. 生成封面截图
 
 ```bash
-video2post process "VIDEO_URL" --generate --targets cover --cover-at 00:00:30
+video2post video "VIDEO_URL" --generate --targets cover --cover-at 00:00:30
 ```
 
 对已有任务重新生成封面：
 
 ```bash
-video2post generate TASK_DIR --targets cover --cover-at 00:00:30
+video2post task generate TASK_DIR --targets cover --cover-at 00:00:30
 ```
 
 ### 7. 日常素材生成 X 草稿
@@ -103,15 +103,15 @@ video2post draft "原始内容" --mode viral_280
 ### 8. 对已有任务重新生成内容
 
 ```bash
-video2post generate TASK_DIR --targets notes,x_article,x_thread,x_titles,publish_formats
+video2post task generate TASK_DIR --targets notes,x_article,x_thread,x_titles,publish_formats
 ```
 
 常见例子：
 
 ```bash
-video2post generate TASK_DIR --targets publish_formats
-video2post generate TASK_DIR --targets x_article,x_thread,x_titles
-video2post generate TASK_DIR --targets article,script,titles
+video2post task generate TASK_DIR --targets publish_formats
+video2post task generate TASK_DIR --targets x_article,x_thread,x_titles
+video2post task generate TASK_DIR --targets article,script,titles
 ```
 
 ### 9. 失败后继续跑
@@ -119,7 +119,7 @@ video2post generate TASK_DIR --targets article,script,titles
 如果音频或转写已经存在，只想补后续缺失步骤：
 
 ```bash
-video2post retry TASK_DIR --generate --targets notes,x_article
+video2post task retry TASK_DIR --generate --targets notes,x_article
 ```
 
 ### 10. 单独把 Markdown 转发布格式
@@ -133,7 +133,7 @@ video2post format article.md --platform wechat,x
 已有任务目录中的稿件：
 
 ```bash
-video2post format-task TASK_DIR --source x_article --platform wechat,x
+video2post format TASK_DIR --source x_article --platform wechat,x
 ```
 
 ## Target 速查
@@ -153,12 +153,12 @@ video2post format-task TASK_DIR --source x_article --platform wechat,x
 
 ## 命令参考
 
-### `process`
+### `video`
 
 完整处理一个视频 URL。
 
 ```bash
-video2post process URL [OPTIONS]
+video2post video URL [OPTIONS]
 ```
 
 常用参数：
@@ -176,7 +176,7 @@ video2post process URL [OPTIONS]
 | `--cover-at TEXT` | 空 | 封面截图时间点，例如 `00:00:30`。 |
 | `--cleanup-source / --keep-source` | 配置中的 `app.cleanup_source` | 音频规范化后是否删除压缩源文件。 |
 
-注意：`--fast` 只在 `process` 命令中生效。它不会改变 `generate TASK_DIR` 的行为。
+注意：`--fast` 只在 `video` 命令中生效。它不会改变 `task generate TASK_DIR` 的行为。
 
 ### `draft`
 
@@ -206,12 +206,12 @@ video2post draft --x-url "https://x.com/user/status/123"
 
 `viral_280.md` 会做本地 280 字符校验，超长时任务标记失败，不写入超长推文。
 
-### `generate`
+### `task generate`
 
 对已有任务目录重新生成内容。
 
 ```bash
-video2post generate TASK_DIR --targets notes,x_article
+video2post task generate TASK_DIR --targets notes,x_article
 ```
 
 参数：
@@ -222,12 +222,12 @@ video2post generate TASK_DIR --targets notes,x_article
 | `--targets TEXT` | 逗号分隔生成目标。为空时使用默认 targets。 |
 | `--cover-at TEXT` | 生成 `cover` 时指定截图时间点。 |
 
-### `retry`
+### `task retry`
 
 从已有任务目录恢复缺失步骤。
 
 ```bash
-video2post retry TASK_DIR --generate --targets notes
+video2post task retry TASK_DIR --generate --targets notes
 ```
 
 参数：
@@ -255,12 +255,12 @@ video2post format article.md --platform wechat,x --output ./publish
 | `--output -o PATH` | 输入文件所在目录 | 输出目录。 |
 | `--rewrite` | false | 预留的 LLM 重写开关；当前 deterministic 格式化建议不使用。 |
 
-### `format-task`
+### `format` for task directories
 
 从任务目录中选择已有稿件转换为发布格式。
 
 ```bash
-video2post format-task TASK_DIR --source x_article --platform wechat,x
+video2post format TASK_DIR --source x_article --platform wechat,x
 ```
 
 参数：
@@ -277,12 +277,12 @@ video2post format-task TASK_DIR --source x_article --platform wechat,x
 - WeChat 优先使用 `article.md`，没有时 fallback 到 `x_article.md`。
 - X 优先使用 `x_article.md`，没有时 fallback 到 `article.md`。
 
-### `tasks`
+### `task list`
 
 列出最近任务和已有产物。
 
 ```bash
-video2post tasks --output ./outputs-check --limit 20
+video2post task list --output ./outputs-check --limit 20
 ```
 
 参数：
@@ -311,20 +311,20 @@ video2post config show --config config.fast.yaml
 ### 创作者快速试稿
 
 ```bash
-video2post process "VIDEO_URL" --fast --cleanup-source
+video2post video "VIDEO_URL" --fast --cleanup-source
 ```
 
 如果结果值得精修，再补完整稿件：
 
 ```bash
-video2post generate TASK_DIR --targets article,script,titles
-video2post generate TASK_DIR --targets publish_formats
+video2post task generate TASK_DIR --targets article,script,titles
+video2post task generate TASK_DIR --targets publish_formats
 ```
 
 ### 长视频稳妥处理
 
 ```bash
-video2post process "VIDEO_URL" --output ./outputs-check --generate --cleanup-source
+video2post video "VIDEO_URL" --output ./outputs-check --generate --cleanup-source
 ```
 
 长稿会自动使用 chunk 摘要和全局摘要链路；已有 chunk summary 会被复用。
@@ -332,7 +332,7 @@ video2post process "VIDEO_URL" --output ./outputs-check --generate --cleanup-sou
 ### 只重做发布格式
 
 ```bash
-video2post generate TASK_DIR --targets publish_formats
+video2post task generate TASK_DIR --targets publish_formats
 ```
 
 这不会重新下载、转写或调用 LLM 生成正文，只会基于已有 `article.md` / `x_article.md` 输出发布格式。
@@ -341,6 +341,6 @@ video2post generate TASK_DIR --targets publish_formats
 
 - YouTube 提示登录或机器人校验：在 `config.yaml` 配置 `download.cookies_from_browser: chrome` 或 `safari`。
 - 中文 YouTube 识别成英文链路：加 `--lang zh`。
-- 只想重新生成某个文件：优先用 `generate TASK_DIR --targets ...`。
+- 只想重新生成某个文件：优先用 `task generate TASK_DIR --targets ...`。
 - 不想保留下载源文件：加 `--cleanup-source`。
 - 当前 shell 找不到 `video2post`：改用 `python3 -m video2post.cli ...`。

@@ -19,8 +19,8 @@ def test_cli_help_shows_application_name():
 
 
 
-def test_process_help_documents_fast_and_targets():
-    result = runner.invoke(app, ["process", "--help"])
+def test_video_help_documents_fast_and_targets():
+    result = runner.invoke(app, ["video", "--help"])
 
     assert result.exit_code == 0
     compact_output = "".join(result.output.split())
@@ -28,12 +28,39 @@ def test_process_help_documents_fast_and_targets():
     assert "translation,notes,x_article,x_thread,x_titles,article,script,titles,cover,publish_formats" in compact_output
 
 
-def test_format_task_help_documents_source_fallback():
-    result = runner.invoke(app, ["format-task", "--help"])
+def test_format_help_documents_source_fallback():
+    result = runner.invoke(app, ["format", "--help"])
 
     assert result.exit_code == 0
     compact_output = " ".join(result.output.split())
-    assert "WeChat uses article then x_article" in compact_output
+    assert "Task artifact source" in compact_output
+
+def test_cli_exposes_simplified_top_level_commands():
+    result = runner.invoke(app, ["--help"])
+
+    assert result.exit_code == 0
+    assert "video" in result.output
+    assert "draft" in result.output
+    assert "format" in result.output
+    assert "task" in result.output
+    assert "process" not in result.output
+    assert "format-task" not in result.output
+
+
+def test_old_workflow_commands_are_removed():
+    for command in ["process", "generate", "retry", "tasks", "format-task"]:
+        result = runner.invoke(app, [command, "--help"])
+        assert result.exit_code != 0
+
+
+def test_task_help_exposes_task_subcommands():
+    result = runner.invoke(app, ["task", "--help"])
+
+    assert result.exit_code == 0
+    assert "generate" in result.output
+    assert "retry" in result.output
+    assert "list" in result.output
+
 
 def test_config_show_prints_effective_config():
     result = runner.invoke(app, ["config", "show"])
@@ -198,7 +225,7 @@ def test_doctor_command_returns_non_zero_when_required_items_are_missing(monkeyp
     assert "[MISSING] ffmpeg" in result.output
 
 
-def test_process_uses_configured_output_directory(tmp_path):
+def test_video_uses_configured_output_directory(tmp_path):
     config_file = tmp_path / "config.yaml"
     configured_output = tmp_path / "configured-output"
     config_file.write_text(
@@ -212,7 +239,7 @@ app:
     result = runner.invoke(
         app,
         [
-            "process",
+            "video",
             "https://www.youtube.com/watch?v=abc",
             "--config",
             str(config_file),
@@ -225,7 +252,7 @@ app:
     assert list(configured_output.glob("*/meta.json"))
 
 
-def test_process_output_option_overrides_config(tmp_path):
+def test_video_output_option_overrides_config(tmp_path):
     config_file = tmp_path / "config.yaml"
     configured_output = tmp_path / "configured-output"
     overridden_output = tmp_path / "overridden-output"
@@ -240,7 +267,7 @@ app:
     result = runner.invoke(
         app,
         [
-            "process",
+            "video",
             "https://www.youtube.com/watch?v=abc",
             "--config",
             str(config_file),
@@ -256,11 +283,11 @@ app:
     assert list(overridden_output.glob("*/meta.json"))
 
 
-def test_process_cleanup_source_option_overrides_config(tmp_path):
+def test_video_cleanup_source_option_overrides_config(tmp_path):
     result = runner.invoke(
         app,
         [
-            "process",
+            "video",
             "https://www.youtube.com/watch?v=abc",
             "--output",
             str(tmp_path),
@@ -273,7 +300,7 @@ def test_process_cleanup_source_option_overrides_config(tmp_path):
     assert "Source cleanup: enabled" in result.output
 
 
-def test_process_marks_metadata_fetched_when_initial_metadata_exists(monkeypatch, tmp_path):
+def test_video_marks_metadata_fetched_when_initial_metadata_exists(monkeypatch, tmp_path):
     monkeypatch.setattr(
         "video2post.cli.fetch_initial_video_metadata",
         lambda url, config=None: VideoMetadata(title="Fetched Title", author="Author"),
@@ -282,7 +309,7 @@ def test_process_marks_metadata_fetched_when_initial_metadata_exists(monkeypatch
     result = runner.invoke(
         app,
         [
-            "process",
+            "video",
             "https://www.youtube.com/watch?v=abc",
             "--output",
             str(tmp_path),
@@ -298,7 +325,7 @@ def test_process_marks_metadata_fetched_when_initial_metadata_exists(monkeypatch
     assert metadata.video.author == "Author"
 
 
-def test_process_can_run_full_pipeline_with_generate(monkeypatch, tmp_path):
+def test_video_can_run_full_pipeline_with_generate(monkeypatch, tmp_path):
     calls = []
 
     def fake_fetch_metadata(url, config=None):
@@ -327,7 +354,7 @@ def test_process_can_run_full_pipeline_with_generate(monkeypatch, tmp_path):
     result = runner.invoke(
         app,
         [
-            "process",
+            "video",
             "https://www.youtube.com/watch?v=abc",
             "--output",
             str(tmp_path),
@@ -349,7 +376,7 @@ def test_process_can_run_full_pipeline_with_generate(monkeypatch, tmp_path):
     assert "Generated:" in result.output
 
 
-def test_process_fast_generates_default_quick_targets_without_generate_flag(monkeypatch, tmp_path):
+def test_video_fast_generates_default_quick_targets_without_generate_flag(monkeypatch, tmp_path):
     calls = []
 
     monkeypatch.setattr(
@@ -374,7 +401,7 @@ def test_process_fast_generates_default_quick_targets_without_generate_flag(monk
     result = runner.invoke(
         app,
         [
-            "process",
+            "video",
             "https://www.youtube.com/watch?v=abc",
             "--output",
             str(tmp_path),
@@ -386,7 +413,7 @@ def test_process_fast_generates_default_quick_targets_without_generate_flag(monk
     assert calls == [("notes", "x_article", "x_thread", "x_titles", "publish_formats")]
 
 
-def test_process_fast_respects_explicit_targets(monkeypatch, tmp_path):
+def test_video_fast_respects_explicit_targets(monkeypatch, tmp_path):
     calls = []
 
     monkeypatch.setattr(
@@ -411,7 +438,7 @@ def test_process_fast_respects_explicit_targets(monkeypatch, tmp_path):
     result = runner.invoke(
         app,
         [
-            "process",
+            "video",
             "https://www.youtube.com/watch?v=abc",
             "--output",
             str(tmp_path),
@@ -425,7 +452,7 @@ def test_process_fast_respects_explicit_targets(monkeypatch, tmp_path):
     assert calls == [("notes",)]
 
 
-def test_process_can_skip_transcribe_and_generate(monkeypatch, tmp_path):
+def test_video_can_skip_transcribe_and_generate(monkeypatch, tmp_path):
     calls = []
 
     monkeypatch.setattr(
@@ -448,7 +475,7 @@ def test_process_can_skip_transcribe_and_generate(monkeypatch, tmp_path):
     result = runner.invoke(
         app,
         [
-            "process",
+            "video",
             "https://www.youtube.com/watch?v=abc",
             "--output",
             str(tmp_path),
@@ -464,7 +491,7 @@ def test_process_can_skip_transcribe_and_generate(monkeypatch, tmp_path):
     assert calls[1] == "audio"
 
 
-def test_process_uses_loaded_config_for_initial_metadata_fetch(monkeypatch, tmp_path):
+def test_video_uses_loaded_config_for_initial_metadata_fetch(monkeypatch, tmp_path):
     config_file = tmp_path / "config.yaml"
     config_file.write_text(
         """
@@ -497,7 +524,7 @@ download:
     result = runner.invoke(
         app,
         [
-            "process",
+            "video",
             "https://www.youtube.com/watch?v=abc",
             "--config",
             str(config_file),
@@ -522,7 +549,7 @@ download:
     )
 
 
-def test_generate_command_prints_progress_messages(monkeypatch, tmp_path):
+def test_task_generate_command_prints_progress_messages(monkeypatch, tmp_path):
     _write_task_metadata(tmp_path, status=TaskStatus.TRANSCRIBED)
 
     def fake_generate(metadata_path_arg, config, targets=None, cover_at=None, progress_callback=None):
@@ -532,7 +559,7 @@ def test_generate_command_prints_progress_messages(monkeypatch, tmp_path):
 
     monkeypatch.setattr("video2post.cli.generate_outputs", fake_generate)
 
-    result = runner.invoke(app, ["generate", str(tmp_path), "--targets", "notes"])
+    result = runner.invoke(app, ["task", "generate", str(tmp_path), "--targets", "notes"])
 
     assert result.exit_code == 0
     assert "Progress: Generating notes..." in result.output
@@ -540,7 +567,7 @@ def test_generate_command_prints_progress_messages(monkeypatch, tmp_path):
     assert "Generated:" in result.output
 
 
-def test_generate_command_regenerates_selected_targets(monkeypatch, tmp_path):
+def test_task_generate_command_regenerates_selected_targets(monkeypatch, tmp_path):
     metadata_path = _write_task_metadata(tmp_path, status=TaskStatus.TRANSCRIBED)
     calls = []
 
@@ -553,6 +580,7 @@ def test_generate_command_regenerates_selected_targets(monkeypatch, tmp_path):
     result = runner.invoke(
         app,
         [
+            "task",
             "generate",
             str(tmp_path),
             "--targets",
@@ -565,7 +593,7 @@ def test_generate_command_regenerates_selected_targets(monkeypatch, tmp_path):
     assert "Generated:" in result.output
 
 
-def test_generate_command_passes_cover_time(monkeypatch, tmp_path):
+def test_task_generate_command_passes_cover_time(monkeypatch, tmp_path):
     metadata_path = _write_task_metadata(tmp_path, status=TaskStatus.TRANSCRIBED)
     calls = []
 
@@ -578,6 +606,7 @@ def test_generate_command_passes_cover_time(monkeypatch, tmp_path):
     result = runner.invoke(
         app,
         [
+            "task",
             "generate",
             str(tmp_path),
             "--targets",
@@ -591,7 +620,7 @@ def test_generate_command_passes_cover_time(monkeypatch, tmp_path):
     assert calls == [(metadata_path, ("cover",), "00:00:30")]
 
 
-def test_retry_transcribes_when_audio_exists_but_transcript_is_missing(monkeypatch, tmp_path):
+def test_task_retry_transcribes_when_audio_exists_but_transcript_is_missing(monkeypatch, tmp_path):
     metadata_path = _write_task_metadata(tmp_path, status=TaskStatus.AUDIO_NORMALIZED)
     (tmp_path / "audio.wav").write_bytes(b"audio")
     calls = []
@@ -611,14 +640,14 @@ def test_retry_transcribes_when_audio_exists_but_transcript_is_missing(monkeypat
         lambda metadata_path_arg, config, targets=None: calls.append("generate"),
     )
 
-    result = runner.invoke(app, ["retry", str(tmp_path)])
+    result = runner.invoke(app, ["task", "retry", str(tmp_path)])
 
     assert result.exit_code == 0
     assert calls == [("transcribe", metadata_path)]
     assert "Transcript:" in result.output
 
 
-def test_retry_can_generate_after_transcription(monkeypatch, tmp_path):
+def test_task_retry_can_generate_after_transcription(monkeypatch, tmp_path):
     metadata_path = _write_task_metadata(tmp_path, status=TaskStatus.TRANSCRIBED)
     (tmp_path / "audio.wav").write_bytes(b"audio")
     (tmp_path / "transcript.en.md").write_text("transcript", encoding="utf-8")
@@ -643,6 +672,7 @@ def test_retry_can_generate_after_transcription(monkeypatch, tmp_path):
     result = runner.invoke(
         app,
         [
+            "task",
             "retry",
             str(tmp_path),
             "--generate",
@@ -656,7 +686,7 @@ def test_retry_can_generate_after_transcription(monkeypatch, tmp_path):
     assert "Generated:" in result.output
 
 
-def test_retry_bilibili_uses_chinese_transcript_as_completion_signal(monkeypatch, tmp_path):
+def test_task_retry_bilibili_uses_chinese_transcript_as_completion_signal(monkeypatch, tmp_path):
     metadata_path = _write_task_metadata(
         tmp_path,
         status=TaskStatus.TRANSCRIBED,
@@ -676,14 +706,14 @@ def test_retry_bilibili_uses_chinese_transcript_as_completion_signal(monkeypatch
         lambda metadata_path_arg, config: calls.append("transcribe"),
     )
 
-    result = runner.invoke(app, ["retry", str(tmp_path)])
+    result = runner.invoke(app, ["task", "retry", str(tmp_path)])
 
     assert result.exit_code == 0
     assert calls == []
     assert "Nothing to retry." in result.output
 
 
-def test_process_generate_uses_configured_chunk_size(monkeypatch, tmp_path):
+def test_video_generate_uses_configured_chunk_size(monkeypatch, tmp_path):
     config_file = tmp_path / "config.yaml"
     config_file.write_text(
         """
@@ -716,7 +746,7 @@ generation:
     result = runner.invoke(
         app,
         [
-            "process",
+            "video",
             "https://www.youtube.com/watch?v=abc",
             "--config",
             str(config_file),
@@ -732,7 +762,7 @@ generation:
     assert calls == [(42, ("notes",))]
 
 
-def test_process_youtube_can_force_chinese_language(monkeypatch, tmp_path):
+def test_video_youtube_can_force_chinese_language(monkeypatch, tmp_path):
     calls = []
 
     monkeypatch.setattr(
@@ -762,7 +792,7 @@ def test_process_youtube_can_force_chinese_language(monkeypatch, tmp_path):
     result = runner.invoke(
         app,
         [
-            "process",
+            "video",
             "https://www.youtube.com/watch?v=abc",
             "--output",
             str(tmp_path),
@@ -778,7 +808,7 @@ def test_process_youtube_can_force_chinese_language(monkeypatch, tmp_path):
     assert calls == [("transcribe", "zh"), ("generate", "zh")]
 
 
-def test_process_bilibili_pipeline_can_generate_from_chinese_transcript(monkeypatch, tmp_path):
+def test_video_bilibili_pipeline_can_generate_from_chinese_transcript(monkeypatch, tmp_path):
     calls = []
 
     monkeypatch.setattr(
@@ -806,7 +836,7 @@ def test_process_bilibili_pipeline_can_generate_from_chinese_transcript(monkeypa
     result = runner.invoke(
         app,
         [
-            "process",
+            "video",
             "https://www.bilibili.com/video/BV123",
             "--output",
             str(tmp_path),
@@ -821,7 +851,7 @@ def test_process_bilibili_pipeline_can_generate_from_chinese_transcript(monkeypa
     assert "Platform: bilibili" in result.output
 
 
-def test_process_shows_friendly_youtube_cookie_guidance(monkeypatch, tmp_path):
+def test_video_shows_friendly_youtube_cookie_guidance(monkeypatch, tmp_path):
     monkeypatch.setattr(
         "video2post.cli.fetch_initial_video_metadata",
         lambda url, config=None: VideoMetadata(title="Needs Cookies"),
@@ -842,7 +872,7 @@ def test_process_shows_friendly_youtube_cookie_guidance(monkeypatch, tmp_path):
     result = runner.invoke(
         app,
         [
-            "process",
+            "video",
             "https://www.youtube.com/watch?v=abc",
             "--output",
             str(tmp_path),
@@ -855,7 +885,7 @@ def test_process_shows_friendly_youtube_cookie_guidance(monkeypatch, tmp_path):
     assert "cookies_from_browser: chrome" in result.output
 
 
-def test_process_shows_friendly_youtube_ejs_guidance(monkeypatch, tmp_path):
+def test_video_shows_friendly_youtube_ejs_guidance(monkeypatch, tmp_path):
     monkeypatch.setattr(
         "video2post.cli.fetch_initial_video_metadata",
         lambda url, config=None: VideoMetadata(title="Needs EJS"),
@@ -877,7 +907,7 @@ def test_process_shows_friendly_youtube_ejs_guidance(monkeypatch, tmp_path):
     result = runner.invoke(
         app,
         [
-            "process",
+            "video",
             "https://www.youtube.com/watch?v=abc",
             "--output",
             str(tmp_path),
@@ -891,7 +921,7 @@ def test_process_shows_friendly_youtube_ejs_guidance(monkeypatch, tmp_path):
     assert "remote_components: ejs:github" in result.output
 
 
-def test_tasks_command_lists_recent_tasks_from_output_directory(tmp_path):
+def test_task_list_command_lists_recent_tasks_from_output_directory(tmp_path):
     older_task = tmp_path / "2026-04-28-older-task"
     newer_task = tmp_path / "2026-04-29-newer-task"
     _write_task_metadata(older_task, status=TaskStatus.TRANSCRIBED)
@@ -906,7 +936,8 @@ def test_tasks_command_lists_recent_tasks_from_output_directory(tmp_path):
     result = runner.invoke(
         app,
         [
-            "tasks",
+            "task",
+            "list",
             "--output",
             str(tmp_path),
         ],
@@ -920,7 +951,7 @@ def test_tasks_command_lists_recent_tasks_from_output_directory(tmp_path):
     assert "2026-04-28-older-task" in lines[1]
 
 
-def test_tasks_command_respects_limit(tmp_path):
+def test_task_list_command_respects_limit(tmp_path):
     for index in range(3):
         task_dir = tmp_path / f"2026-04-2{index}-task-{index}"
         _write_task_metadata(task_dir, status=TaskStatus.CREATED)
@@ -929,7 +960,8 @@ def test_tasks_command_respects_limit(tmp_path):
     result = runner.invoke(
         app,
         [
-            "tasks",
+            "task",
+            "list",
             "--output",
             str(tmp_path),
             "--limit",
@@ -984,13 +1016,13 @@ def test_format_command_rejects_unknown_platform(tmp_path):
     assert "Unsupported platform" in result.output
 
 
-def test_format_task_command_uses_existing_artifacts(tmp_path):
+def test_format_command_for_task_uses_existing_artifacts(tmp_path):
     task_dir = tmp_path / "task"
     task_dir.mkdir()
     (task_dir / "meta.json").write_text("{}", encoding="utf-8")
     (task_dir / "article.md").write_text("# Article", encoding="utf-8")
 
-    result = runner.invoke(app, ["format-task", str(task_dir), "--platform", "wechat"])
+    result = runner.invoke(app, ["format", str(task_dir), "--platform", "wechat"])
 
     assert result.exit_code == 0
     assert (task_dir / "article.wechat.md").exists()
