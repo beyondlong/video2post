@@ -67,7 +67,7 @@ video2post format ./outputs/2026-... --source article --platform wechat,x
 
 默认转换不调用 LLM。
 
-`--rewrite` 是显式 opt-in，目前保留为改写钩子；确定性转换链路可独立使用和测试。
+`--rewrite` 是显式 opt-in，会先用配置的 LLM 将 Markdown 润色成更适合目标平台发布的正文，再执行确定性格式转换。默认不启用 LLM，确保普通格式转换可独立使用和测试。
 
 ## 第一版支持的 Markdown
 

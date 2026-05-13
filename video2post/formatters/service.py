@@ -1,5 +1,6 @@
 from pathlib import Path
 
+from video2post.config import AppConfig
 from video2post.formatters.markdown_parser import parse_markdown
 from video2post.formatters.models import FormatResult, Platform, PlatformOutput
 from video2post.formatters.rewrite import rewrite_markdown
@@ -14,6 +15,9 @@ def format_markdown_file(
     platforms: list[Platform],
     output_dir: Path | str | None = None,
     rewrite: bool = False,
+    config: AppConfig | None = None,
+    rewrite_provider: object | None = None,
+    prompt_dir: Path | str = "prompts",
 ) -> FormatResult:
     source_path = Path(input_path)
     if not source_path.exists():
@@ -23,7 +27,16 @@ def format_markdown_file(
 
     content = source_path.read_text(encoding="utf-8")
     if rewrite:
-        content = rewrite_markdown(content, platforms)
+        if config is None and rewrite_provider is None and prompt_dir == "prompts":
+            content = rewrite_markdown(content, platforms)
+        else:
+            content = rewrite_markdown(
+                content,
+                platforms,
+                config=config,
+                provider=rewrite_provider,
+                prompt_dir=prompt_dir,
+            )
 
     document = parse_markdown(content)
     outputs: list[PlatformOutput] = []
@@ -60,6 +73,9 @@ def format_task_artifacts(
     source: str | None = None,
     output_dir: Path | str | None = None,
     rewrite: bool = False,
+    config: AppConfig | None = None,
+    rewrite_provider: object | None = None,
+    prompt_dir: Path | str = "prompts",
 ) -> FormatResult:
     task_path = Path(task_dir)
     target_dir = Path(output_dir) if output_dir is not None else task_path
@@ -71,6 +87,9 @@ def format_task_artifacts(
             platforms=[platform],
             output_dir=target_dir,
             rewrite=rewrite,
+            config=config,
+            rewrite_provider=rewrite_provider,
+            prompt_dir=prompt_dir,
         )
         outputs.extend(result.outputs)
     return FormatResult(outputs=outputs)

@@ -1,5 +1,6 @@
 from pathlib import Path
 
+from video2post.config import AppConfig
 from video2post.formatters.models import FormatRequest, Platform, parse_platforms
 from video2post.formatters.service import format_markdown_file, format_task_artifacts
 
@@ -104,6 +105,34 @@ def test_format_markdown_file_rewrites_when_requested(tmp_path, monkeypatch):
     format_markdown_file(input_path, platforms=[Platform.X], rewrite=True)
 
     assert (tmp_path / "article.x.md").read_text(encoding="utf-8").startswith("# Rewritten")
+
+
+def test_format_markdown_file_rewrite_can_use_provider_and_config(tmp_path):
+    class FakeProvider:
+        def __init__(self):
+            self.prompts = []
+
+        def generate(self, prompt):
+            self.prompts.append(prompt)
+            return "# Polished\n\n适合发布的正文"
+
+    input_path = tmp_path / "article.md"
+    input_path.write_text("# Original\n\n原始正文", encoding="utf-8")
+    provider = FakeProvider()
+
+    format_markdown_file(
+        input_path,
+        platforms=[Platform.WECHAT, Platform.X],
+        rewrite=True,
+        config=AppConfig(),
+        rewrite_provider=provider,
+    )
+
+    assert provider.prompts
+    assert "wechat,x" in provider.prompts[0]
+    assert "# Original" in provider.prompts[0]
+    assert (tmp_path / "article.x.md").read_text(encoding="utf-8").startswith("# Polished")
+    assert (tmp_path / "article.wechat.html").exists()
 
 
 def test_wechat_html_uses_warm_public_account_theme(tmp_path):

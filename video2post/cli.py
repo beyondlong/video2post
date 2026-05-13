@@ -351,6 +351,10 @@ def draft_command(
 @app.command("format")
 def format_command(
     input_path: Annotated[Path, typer.Argument(help="Markdown file or existing task directory to format.")],
+    config: Annotated[
+        Path | None,
+        typer.Option("--config", "-c", help="Path to config.yaml for --rewrite."),
+    ] = None,
     platform_arg: Annotated[
         str | None,
         typer.Argument(help="Optional platform shortcut, e.g. wechat,x."),
@@ -371,7 +375,7 @@ def format_command(
         bool,
         typer.Option(
             "--rewrite",
-            help="Reserved LLM rewrite step before formatting; deterministic formatting usually does not need it.",
+            help="Use the configured LLM to polish Markdown before deterministic formatting.",
         ),
     ] = False,
 ) -> None:
@@ -380,6 +384,7 @@ def format_command(
     Platforms: wechat,x. WeChat writes *.wechat.md/html; X writes *.x.md/txt.
     """
     try:
+        loaded_config = load_config(config) if rewrite or config is not None else None
         platforms = parse_platforms(platform_arg or platform)
         if input_path.is_dir():
             result = format_task_artifacts(
@@ -388,6 +393,7 @@ def format_command(
                 source=source,
                 output_dir=output,
                 rewrite=rewrite,
+                config=loaded_config,
             )
         else:
             result = format_markdown_file(
@@ -395,6 +401,7 @@ def format_command(
                 platforms=platforms,
                 output_dir=output,
                 rewrite=rewrite,
+                config=loaded_config,
             )
     except (ValueError, FileNotFoundError) as error:
         typer.echo(str(error))

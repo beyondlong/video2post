@@ -1071,6 +1071,48 @@ def test_format_command_accepts_single_dash_output_alias(tmp_path):
     assert (output_dir / "article.wechat.html").exists()
 
 
+def test_format_command_passes_config_when_rewrite_requested(monkeypatch, tmp_path):
+    config_file = tmp_path / "config.yaml"
+    config_file.write_text(
+        """
+llm:
+  base_url: https://example.test/v1
+  model: test-model
+""".strip(),
+        encoding="utf-8",
+    )
+    input_path = tmp_path / "article.md"
+    input_path.write_text("# Title", encoding="utf-8")
+    calls = []
+
+    class FakeResult:
+        @property
+        def paths(self):
+            return [tmp_path / "article.x.md"]
+
+    def fake_format_markdown_file(input_path_arg, *, platforms, output_dir=None, rewrite=False, config=None):
+        calls.append((rewrite, config.llm.base_url, config.llm.model))
+        return FakeResult()
+
+    monkeypatch.setattr("video2post.cli.format_markdown_file", fake_format_markdown_file)
+
+    result = runner.invoke(
+        app,
+        [
+            "format",
+            str(input_path),
+            "--platform",
+            "x",
+            "--rewrite",
+            "--config",
+            str(config_file),
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert calls == [(True, "https://example.test/v1", "test-model")]
+
+
 def test_format_command_rejects_unknown_platform(tmp_path):
     input_path = tmp_path / "article.md"
     input_path.write_text("# Title", encoding="utf-8")

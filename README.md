@@ -435,6 +435,7 @@ segments:
 video2post format article.md --platform wechat,x
 video2post format article.md wechat,x
 video2post format article.md --platform wechat --output ./publish-ready
+video2post format article.md --platform wechat,x --rewrite --config config.yaml
 ```
 
 也可以转换已有 task 目录中的产物：
@@ -452,4 +453,4 @@ video2post format ./outputs/2026-... --source article --platform wechat,x
 *.x.txt
 ```
 
-默认只做确定性格式转换，不调用 LLM。需要平台化改写时显式使用 `--rewrite`。
+默认只做确定性格式转换，不调用 LLM。需要平台化改写时显式使用 `--rewrite`，它会读取当前 LLM 配置先润色 Markdown，再输出公众号和 X 发布格式。
