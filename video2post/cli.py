@@ -44,9 +44,24 @@ def main() -> None:
     """video2post command line interface."""
 
 
+LOCAL_AUDIO_EXTENSIONS = {
+    ".aac",
+    ".aiff",
+    ".flac",
+    ".m4a",
+    ".mp3",
+    ".ogg",
+    ".opus",
+    ".wav",
+}
+LOCAL_VIDEO_EXTENSIONS = {".m4v", ".mkv", ".mov", ".mp4", ".webm"}
+
+
 @app.command("video")
 def video_command(
-    url: Annotated[str, typer.Argument(help="YouTube or Bilibili video URL.")],
+    url: Annotated[
+        str, typer.Argument(help="YouTube/Bilibili URL or local audio/video file path.")
+    ],
     config: Annotated[
         Path | None,
         typer.Option("--config", "-c", help="Path to config.yaml."),
@@ -109,7 +124,7 @@ def video_command(
         ),
     ] = None,
 ) -> None:
-    """Process a video URL through the local pipeline.
+    """Process a video URL or local audio/video file through the local pipeline.
 
     Fast default targets: notes,x_article,x_thread,x_titles,publish_formats.
     Supported targets: translation,notes,x_article,x_thread,x_titles,article,script,titles,cover,publish_formats.
@@ -119,13 +134,20 @@ def video_command(
         loaded_config.app.cleanup_source = cleanup_source
     output_dir = output or loaded_config.app.output_dir
     source_language = _normalize_source_language(lang)
-    platform = detect_platform(url)
-    video_metadata = (
-        fetch_initial_video_metadata(url, config=loaded_config) or VideoMetadata(title="untitled")
-    )
+    local_source = _resolve_local_source(url)
+    if local_source is not None:
+        source = str(local_source)
+        platform = _detect_local_platform(local_source)
+        video_metadata = _metadata_for_local_source(local_source)
+    else:
+        source = url
+        platform = detect_platform(url)
+        video_metadata = (
+            fetch_initial_video_metadata(url, config=loaded_config) or VideoMetadata(title="untitled")
+        )
     metadata = create_task_workspace(
         output_dir=output_dir,
-        source_url=url,
+        source_url=source,
         platform=platform,
         title=video_metadata.title or "untitled",
     )
@@ -468,6 +490,26 @@ def _parse_process_targets(raw_targets: str | None, *, fast: bool) -> list[str] 
     if fast:
         return FAST_GENERATION_TARGETS.copy()
     return None
+
+
+def _resolve_local_source(value: str) -> Path | None:
+    path = Path(value).expanduser()
+    if path.is_file():
+        return path.resolve()
+    return None
+
+
+def _detect_local_platform(path: Path) -> str:
+    suffix = path.suffix.lower()
+    if suffix in LOCAL_AUDIO_EXTENSIONS:
+        return "local_audio"
+    if suffix in LOCAL_VIDEO_EXTENSIONS:
+        return "local_video"
+    return "local_file"
+
+
+def _metadata_for_local_source(path: Path) -> VideoMetadata:
+    return VideoMetadata(title=path.stem)
 
 
 def _expected_transcript_path(metadata: VideoMetadata | TaskMetadata) -> Path:

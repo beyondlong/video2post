@@ -94,6 +94,8 @@ video2post
 ```bash
 video2post video "https://www.youtube.com/watch?v=xxxx"
 video2post video "https://www.bilibili.com/video/BVxxxx"
+video2post video ./local-video.mp4 --lang zh --fast
+video2post video ./local-audio.wav --lang zh --generate
 ```
 
 如果当前 shell 里的 `video2post` 命令还没有正确绑定到这个仓库，也可以先用：
@@ -115,6 +117,8 @@ video2post video URL --cleanup-source
 video2post video URL --no-transcribe
 video2post video URL --lang zh
 video2post video URL --no-download
+video2post video ./local-video.mp4 --fast
+video2post video ./local-audio.wav --lang zh --generate
 video2post draft "原始内容" --mode x_engage
 video2post draft "原始内容" --mode viral_280
 video2post draft --x-url "https://x.com/user/status/123"
@@ -415,7 +419,7 @@ segments:
 
 本项目用于个人学习、整理和二次创作辅助。生成内容时应尊重原作者，避免直接搬运原视频表达，必要时标注来源。
 
-视频平台规则可能变化，下载能力依赖 `yt-dlp` 的实际支持情况。部分平台或链接可能需要 Cookie，也可能出现下载失败。后续应考虑支持本地音频或视频文件输入作为兜底方案。
+视频平台规则可能变化，下载能力依赖 `yt-dlp` 的实际支持情况。部分平台或链接可能需要 Cookie，也可能出现下载失败。遇到平台下载不稳定时，可以先用其他方式保存为本地音频或视频文件，再交给 `video2post video ./local-file.mp4` 继续转写和出稿。
 
 ## 文档
 

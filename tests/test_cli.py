@@ -26,6 +26,7 @@ def test_video_help_documents_fast_and_targets():
     compact_output = "".join(result.output.split())
     assert "notes,x_article,x_thread,x_titles,publish_formats" in compact_output
     assert "translation,notes,x_article,x_thread,x_titles,article,script,titles,cover,publish_formats" in compact_output
+    assert "localaudio/videofile" in compact_output
 
 
 def test_format_help_documents_source_fallback():
@@ -323,6 +324,43 @@ def test_video_marks_metadata_fetched_when_initial_metadata_exists(monkeypatch, 
     assert result.exit_code == 0
     assert metadata.status == TaskStatus.METADATA_FETCHED
     assert metadata.video.author == "Author"
+
+
+def test_video_accepts_local_file_source(monkeypatch, tmp_path):
+    source = tmp_path / "local clip.mp4"
+    source.write_bytes(b"video")
+    calls = []
+
+    monkeypatch.setattr(
+        "video2post.cli.fetch_initial_video_metadata",
+        lambda url, config=None: calls.append(("fetch_metadata", url)) or None,
+    )
+    monkeypatch.setattr(
+        "video2post.cli.prepare_audio",
+        lambda metadata_path, config: calls.append(("audio", metadata_path.name))
+        or metadata_path.parent / "audio.wav",
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            "video",
+            str(source),
+            "--output",
+            str(tmp_path / "outputs"),
+            "--no-transcribe",
+        ],
+    )
+
+    metadata = TaskMetadata.model_validate_json(
+        list((tmp_path / "outputs").glob("*/meta.json"))[0].read_text(encoding="utf-8")
+    )
+    assert result.exit_code == 0
+    assert calls == [("audio", "meta.json")]
+    assert metadata.platform == "local_video"
+    assert metadata.source_url == str(source)
+    assert metadata.video.title == "local clip"
+    assert "Platform: local_video" in result.output
 
 
 def test_video_can_run_full_pipeline_with_generate(monkeypatch, tmp_path):

@@ -26,7 +26,7 @@ video2post format article.md --platform wechat --output ./publish-ready
 ## Task 产物
 
 ```bash
-video2post format-task ./outputs/2026-... --source article --platform wechat,x
+video2post format ./outputs/2026-... --source article --platform wechat,x
 ```
 
 `--source` 可选：

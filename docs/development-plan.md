@@ -189,7 +189,7 @@ prompts/
 - 生成 `x_titles.md`。
 - 预留传统 `article.md`、`script.md`、`titles.md` 作为兼容产物。
 - 完成 pipeline 编排。
-- 实现 `video2post URL` 主命令。
+- 实现 `video2post video URL_OR_FILE` 主命令。
 
 验收标准：
 
@@ -218,8 +218,8 @@ x_titles.md
 
 主要任务：
 
-- 实现 `video2post retry TASK_DIR`。
-- 实现 `video2post generate TASK_DIR --targets article,script,titles`。
+- 实现 `video2post task retry TASK_DIR`。
+- 实现 `video2post task generate TASK_DIR --targets article,script,titles`。
 - 支持基于已有转写和笔记重新生成二创内容。
 - 支持只重新生成指定目标文件。
 - 支持查看当前配置 `video2post config show`。
@@ -255,11 +255,11 @@ x_titles.md
 
 目标：在不牺牲基本可用性的前提下，优先缩短“音频 -> 英文稿 -> 中文整理稿”的等待时间。
 
-当前状态：已讨论并记录需求，暂缓实现，后续在阶段 7 完善后继续推进。
+当前状态：已实现。`video --fast` 会自动生成核心出稿产物，并包含发布格式。
 
 主要任务：
 
-- 设计 `--fast` 模式。
+- 已实现 `--fast` 模式。
 - 使用更轻量的 ASR 模型作为默认快速通道。
 - 默认输出段落版转写稿，减少不必要的时间戳文本干扰。
 - 保留原始 segment 到独立 JSON 文件，兼顾后续精校和切片。
@@ -396,7 +396,7 @@ x_titles.md
 
 - 字幕优先。
 - Cookie 支持。
-- 本地文件输入。
+- 本地文件输入：已支持 `video ./local-video.mp4` 和 `video ./local-audio.wav`，继续补真实样例验证。
 - Web 工作台。
 - 桌面应用。
 - 素材库和检索。

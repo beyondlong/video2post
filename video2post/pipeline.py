@@ -66,16 +66,21 @@ def prepare_audio(
     active_normalizer = normalizer or FfmpegAudioNormalizer()
 
     try:
-        output_template = task_dir / "source.%(ext)s"
-        source_audio = active_downloader.download_audio(metadata.source_url, output_template)
-        update_status(metadata_path, TaskStatus.AUDIO_DOWNLOADED)
+        if _is_local_media_source(metadata):
+            source_audio = Path(metadata.source_url).expanduser()
+            cleanup_after_normalize = False
+        else:
+            output_template = task_dir / "source.%(ext)s"
+            source_audio = active_downloader.download_audio(metadata.source_url, output_template)
+            cleanup_after_normalize = config.app.cleanup_source
+            update_status(metadata_path, TaskStatus.AUDIO_DOWNLOADED)
         normalized_audio = active_normalizer.normalize(
             source_audio,
             audio_path,
             sample_rate=config.audio.sample_rate,
             channels=config.audio.channels,
         )
-        if config.app.cleanup_source and source_audio != normalized_audio:
+        if cleanup_after_normalize and source_audio != normalized_audio:
             source_audio.unlink(missing_ok=True)
         update_status(metadata_path, TaskStatus.AUDIO_NORMALIZED)
         return normalized_audio
@@ -263,8 +268,15 @@ def _generate_cover_artifacts(
 ) -> list[Path]:
     active_downloader = downloader or YtDlpDownloader(settings=config.download)
     active_cover_extractor = cover_extractor or FfmpegVideoFrameExtractor()
-    source_template = metadata.task_dir / "cover-source.%(ext)s"
-    source_video = active_downloader.download_video(metadata.source_url, source_template)
+    source_video_is_temporary = False
+    if metadata.platform == "local_video":
+        source_video = Path(metadata.source_url).expanduser()
+    elif metadata.platform == "local_audio":
+        raise ValueError("Cover generation requires a video source, but this task uses local audio.")
+    else:
+        source_template = metadata.task_dir / "cover-source.%(ext)s"
+        source_video = active_downloader.download_video(metadata.source_url, source_template)
+        source_video_is_temporary = True
     cover_path = metadata.task_dir / "cover.jpg"
     cover_meta_path = metadata.task_dir / "cover.meta.json"
     cover_seconds = _resolve_cover_time_seconds(metadata, cover_at)
@@ -292,14 +304,22 @@ def _generate_cover_artifacts(
             + "\n",
             encoding="utf-8",
         )
-        source_video.unlink(missing_ok=True)
+        if source_video_is_temporary:
+            source_video.unlink(missing_ok=True)
         metadata.status = TaskStatus.COVER_GENERATED
         metadata.error = None
         write_metadata(metadata)
         return [cover_path, cover_meta_path]
     except Exception:
-        source_video.unlink(missing_ok=True)
+        if source_video_is_temporary:
+            source_video.unlink(missing_ok=True)
         raise
+
+
+def _is_local_media_source(metadata: TaskMetadata) -> bool:
+    return metadata.platform in {"local_audio", "local_video", "local_file"} and Path(
+        metadata.source_url
+    ).expanduser().is_file()
 
 
 def _resolve_cover_time_seconds(metadata: TaskMetadata, cover_at: str | None) -> float:

@@ -77,6 +77,34 @@ def test_prepare_audio_can_cleanup_downloaded_source(tmp_path):
     assert not (tmp_path / "downloaded.m4a").exists()
 
 
+def test_prepare_audio_normalizes_local_source_without_downloader(tmp_path):
+    source = tmp_path / "clip.mp4"
+    source.write_text("video", encoding="utf-8")
+    metadata = TaskMetadata(
+        source_url=str(source),
+        platform="local_video",
+        task_dir=tmp_path / "task",
+        video=VideoMetadata(title="clip"),
+    )
+    write_metadata(metadata)
+    downloader = FakeDownloader()
+    normalizer = FakeNormalizer()
+
+    audio_path = prepare_audio(
+        metadata.task_dir / "meta.json",
+        AppConfig(),
+        downloader=downloader,
+        normalizer=normalizer,
+    )
+
+    loaded = read_metadata(metadata.task_dir / "meta.json")
+    assert audio_path == metadata.task_dir / "audio.wav"
+    assert loaded.status == TaskStatus.AUDIO_NORMALIZED
+    assert downloader.downloads == []
+    assert normalizer.calls == [(source, metadata.task_dir / "audio.wav", 16000, 1)]
+    assert source.exists()
+
+
 def test_prepare_audio_records_failure(tmp_path):
     class FailingDownloader:
         def download_audio(self, url, output_template):

@@ -155,10 +155,10 @@ video2post format TASK_DIR --source x_article --platform wechat,x
 
 ### `video`
 
-完整处理一个视频 URL。
+完整处理一个视频 URL，或一个本地音频/视频文件。
 
 ```bash
-video2post video URL [OPTIONS]
+video2post video URL_OR_FILE [OPTIONS]
 ```
 
 常用参数：
@@ -174,7 +174,15 @@ video2post video URL [OPTIONS]
 | `--fast / --standard` | standard | 快速出稿模式；自动生成核心 targets。 |
 | `--targets TEXT` | 空 | 逗号分隔生成目标，例如 `notes,x_article`。 |
 | `--cover-at TEXT` | 空 | 封面截图时间点，例如 `00:00:30`。 |
-| `--cleanup-source / --keep-source` | 配置中的 `app.cleanup_source` | 音频规范化后是否删除压缩源文件。 |
+| `--cleanup-source / --keep-source` | 配置中的 `app.cleanup_source` | 音频规范化后是否删除压缩源文件。对本地文件输入不会删除原文件。 |
+
+示例：
+
+```bash
+video2post video "https://www.youtube.com/watch?v=xxxx" --fast
+video2post video ./local-video.mp4 --lang zh --fast
+video2post video ./local-audio.wav --lang zh --generate --targets notes,x_article
+```
 
 注意：`--fast` 只在 `video` 命令中生效。它不会改变 `task generate TASK_DIR` 的行为。
 

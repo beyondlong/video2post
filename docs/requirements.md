@@ -66,7 +66,7 @@
 - TikTok / 抖音
 - 视频号
 - 小红书视频
-- 本地视频或音频文件上传
+- 本地视频或音频文件输入（CLI 已支持本地路径）
 
 ### 4.3 平台风险
 
@@ -75,11 +75,11 @@
 - 某些链接可能下载失败。
 - 某些平台可能需要 Cookie。
 - B 站部分内容可能受权限、清晰度、登录状态影响。
-- 后续应提供本地音频/视频文件输入作为兜底。
+- 已提供本地音频/视频文件输入作为平台下载失败时的兜底。
 
 ## 5. 第一版产品形态
 
-第一版是一个本地 CLI 工具，暂定命令名：
+当前第一版是一个本地 CLI 工具，核心命令：
 
 ```bash
 video2post
@@ -88,19 +88,23 @@ video2post
 典型使用方式：
 
 ```bash
-video2post "https://www.youtube.com/watch?v=xxxx"
-video2post "https://www.bilibili.com/video/BVxxxx"
+video2post video "https://www.youtube.com/watch?v=xxxx"
+video2post video "https://www.bilibili.com/video/BVxxxx"
+video2post video ./local-video.mp4 --lang zh --fast
 ```
 
 可选参数示例：
 
 ```bash
-video2post URL --platform youtube
-video2post URL --platform bilibili
-video2post URL --lang en
-video2post URL --lang zh
-video2post URL --targets article,script,titles
-video2post URL --output ./outputs
+video2post video YOUTUBE_URL
+video2post video BILIBILI_URL
+video2post video URL --lang en
+video2post video URL --lang zh
+video2post video URL --generate --targets article,script,titles
+video2post video URL --output ./outputs
+video2post video ./local-video.mp4 --lang zh --fast
+video2post draft "原始内容" --mode viral_280
+video2post format article.md --platform wechat,x
 ```
 
 ## 6. 核心处理流程
@@ -108,10 +112,10 @@ video2post URL --output ./outputs
 整体 pipeline：
 
 ```text
-视频链接
-  -> 平台识别
+视频链接或本地音视频文件
+  -> 平台/本地源识别
   -> 视频元数据提取
-  -> 音频下载
+  -> 音频下载或本地文件读取
   -> 音频格式标准化
   -> 语音转文字
   -> 文本清洗和分段
@@ -387,21 +391,21 @@ macOS 优先的原因：
 建议命令形态：
 
 ```bash
-video2post URL
-video2post URL --platform youtube
-video2post URL --platform bilibili
-video2post URL --lang en
-video2post URL --lang zh
-video2post URL --targets article,script,titles
-video2post URL --output ./outputs
+video2post video URL
+video2post video YOUTUBE_URL
+video2post video BILIBILI_URL
+video2post video URL --lang en
+video2post video URL --lang zh
+video2post video URL --generate --targets article,script,titles
+video2post video URL --output ./outputs
 ```
 
 后续可扩展子命令：
 
 ```bash
 video2post transcribe URL
-video2post generate ./outputs/task-dir
-video2post retry ./outputs/task-dir
+video2post task generate ./outputs/task-dir
+video2post task retry ./outputs/task-dir
 video2post config show
 ```
 
@@ -778,8 +782,8 @@ failed
 CLI 后续可以提供重跑能力：
 
 ```bash
-video2post retry ./outputs/task-dir
-video2post generate ./outputs/task-dir --targets article,titles
+video2post task retry ./outputs/task-dir
+video2post task generate ./outputs/task-dir --targets article,titles
 ```
 
 这能避免长视频处理失败后从头下载或重新转写。
@@ -896,7 +900,7 @@ summaries/
 必须实现：
 
 ```bash
-video2post URL
+video2post video URL
 ```
 
 用途：
@@ -910,7 +914,7 @@ video2post URL
 建议实现：
 
 ```bash
-video2post retry TASK_DIR
+video2post task retry TASK_DIR
 ```
 
 用途：
@@ -919,7 +923,7 @@ video2post retry TASK_DIR
 - 根据任务状态继续未完成阶段。
 
 ```bash
-video2post generate TASK_DIR --targets article,script,titles
+video2post task generate TASK_DIR --targets article,script,titles
 ```
 
 用途：
@@ -937,7 +941,7 @@ video2post config show
 - 查看当前生效配置。
 - 帮助排查 API、模型和输出目录问题。
 
-暂缓实现：
+后续增强：
 
 - 批量处理命令。
 - 自动发布命令。

@@ -156,8 +156,8 @@ https://www.youtube.com/watch?v=474wZZHoWN4
 可用参数：
 
 ```bash
-video2post process URL --cleanup-source
-video2post process URL --keep-source
+video2post video URL --cleanup-source
+video2post video URL --keep-source
 ```
 
 作用：
@@ -190,7 +190,7 @@ language
 
 后续优化记录：
 
-- 已讨论 `--fast` 模式，但当前决定暂缓实现。
+- 已实现 `--fast` 快速出稿模式，默认生成 `notes,x_article,x_thread,x_titles,publish_formats`。
 - 后续可以把它做成“更快出稿”的模式，优先面向二创场景。
 - 预期能力包括：更轻量的 ASR 模型、段落化英文稿、减少非必要产物、优先生成中文整理稿和笔记。
 
@@ -278,21 +278,27 @@ prompts/
 当前主命令：
 
 ```bash
-video2post process URL
+video2post video URL
 ```
 
 常用参数：
 
 ```bash
-video2post process URL --output ./outputs
-video2post process URL --generate --targets titles
-video2post process URL --generate --targets article,script,titles
-video2post process URL --cleanup-source
-video2post process URL --no-transcribe
-video2post process URL --no-download
+video2post video URL --output ./outputs
+video2post video URL --generate --targets titles
+video2post video URL --generate --targets article,script,titles
+video2post video URL --cleanup-source
+video2post video URL --no-transcribe
+video2post video URL --no-download
 ```
 
-当前 `process` 命令能力：
+当前 `video` 命令能力：
+
+```bash
+video2post video ./local-video.mp4 --lang zh --fast
+video2post video ./local-audio.wav --lang zh --generate
+```
+
 
 - 创建任务目录。
 - 获取视频元数据。
@@ -322,8 +328,8 @@ video2post process URL --no-download
 当前可用命令示例：
 
 ```bash
-video2post generate TASK_DIR --targets x_article,x_thread,x_titles
-video2post generate TASK_DIR --targets cover --cover-at 00:00:30
+video2post task generate TASK_DIR --targets x_article,x_thread,x_titles
+video2post task generate TASK_DIR --targets cover --cover-at 00:00:30
 ```
 
 ### 8. 局部生成和断点续跑
@@ -331,8 +337,8 @@ video2post generate TASK_DIR --targets cover --cover-at 00:00:30
 已新增两个命令：
 
 ```bash
-video2post generate TASK_DIR --targets article,script,titles
-video2post retry TASK_DIR
+video2post task generate TASK_DIR --targets article,script,titles
+video2post task retry TASK_DIR
 ```
 
 `generate` 用途：
@@ -341,7 +347,7 @@ video2post retry TASK_DIR
 - 适合修改 Prompt 后重新生成文章、标题或口播稿。
 - 不需要重新下载音频或重新 ASR。
 
-`retry` 用途：
+`task retry` 用途：
 
 - 从已有任务目录继续缺失步骤。
 - 如果已有 `audio.wav` 但缺少 `transcript.en.md`，会直接补转写。
@@ -350,9 +356,9 @@ video2post retry TASK_DIR
 示例：
 
 ```bash
-video2post generate ./outputs/2026-04-29-video-title --targets titles
-video2post retry ./outputs/2026-04-29-video-title
-video2post retry ./outputs/2026-04-29-video-title --generate --targets titles
+video2post task generate ./outputs/2026-04-29-video-title --targets titles
+video2post task retry ./outputs/2026-04-29-video-title
+video2post task retry ./outputs/2026-04-29-video-title --generate --targets titles
 ```
 
 ## 当前可测试效果
@@ -366,10 +372,12 @@ video2post --help
 应能看到：
 
 ```text
-process
-generate
-retry
+video
+draft
+format
+task
 config
+doctor
 ```
 
 ### 2. 查看当前配置
@@ -388,7 +396,7 @@ openai_compatible
 ### 3. 只创建任务目录，不下载
 
 ```bash
-video2post process "https://www.youtube.com/watch?v=474wZZHoWN4" --no-download
+video2post video "https://www.youtube.com/watch?v=474wZZHoWN4" --no-download
 ```
 
 可验证：
@@ -401,7 +409,7 @@ video2post process "https://www.youtube.com/watch?v=474wZZHoWN4" --no-download
 ### 4. 下载并标准化音频
 
 ```bash
-video2post process "https://www.youtube.com/watch?v=474wZZHoWN4" --no-transcribe --cleanup-source
+video2post video "https://www.youtube.com/watch?v=474wZZHoWN4" --no-transcribe --cleanup-source
 ```
 
 可验证：
@@ -429,7 +437,7 @@ codec_name=pcm_s16le
 已有 `transcript.en.md` 后，可以测试：
 
 ```bash
-video2post generate TASK_DIR --targets titles
+video2post task generate TASK_DIR --targets titles
 ```
 
 可验证：
@@ -444,7 +452,7 @@ video2post generate TASK_DIR --targets titles
 如果任务目录里已有 `audio.wav`，但没有 `transcript.en.md`：
 
 ```bash
-video2post retry TASK_DIR
+video2post task retry TASK_DIR
 ```
 
 可验证：
@@ -456,7 +464,7 @@ video2post retry TASK_DIR
 如果已有转写稿：
 
 ```bash
-video2post retry TASK_DIR --generate --targets titles
+video2post task retry TASK_DIR --generate --targets titles
 ```
 
 可验证：
@@ -518,12 +526,17 @@ python3 -m pytest tests/test_pipeline_generate.py tests/test_cli.py -q
   - `FunASR` 已接入并做过真实环境测试，但当前不建议作为默认中文 ASR
   - 仍待补更多真实样例交叉验证，以及中文 ASR 默认方案收口
 
-### 已记录但暂缓实现
+### 已完成的新增能力
 
 - 阶段 7.5：`--fast` 快速出稿模式
-  - 已实现 `process --fast`
+  - 已实现 `video --fast`
   - 未显式传 `--targets` 时默认输出 `notes/x_article/x_thread/x_titles/publish_formats`
   - 显式传 `--targets` 时保持用户选择优先
+
+- 本地音频/视频文件输入兜底方案
+  - 已实现 `video ./local-video.mp4` 和 `video ./local-audio.wav`
+  - 本地文件会直接交给 ffmpeg 标准化，不再走 yt-dlp
+  - 原始本地文件不会因为 `--cleanup-source` 被删除
 
 ### 新增主线方向
 
@@ -538,7 +551,6 @@ python3 -m pytest tests/test_pipeline_generate.py tests/test_cli.py -q
 - 本地素材库和检索
 - 批量任务队列
 - 自动发布到公众号、微博、小红书、B 站等平台
-- 本地音频/视频文件输入兜底方案
 
 ## 当前限制
 
@@ -572,6 +584,6 @@ python3 -m pytest tests/test_pipeline_generate.py tests/test_cli.py -q
 2. 检查 `chunks/` 是否按时间范围合理切分。
 3. 检查 `summaries/global.summary.md` 是否覆盖全片主线。
 4. 根据真实输出微调 `chunk_summary.md` 和 `global_summary.md`。
-5. 进入 `--fast` 快速出稿模式设计与实现。
+5. 继续补齐本地文件输入、X 抓取和发布格式的真实样例验证。
 
 这样可以让 30-90 分钟技术视频更稳定，也更适合后续真实自媒体工作流。
