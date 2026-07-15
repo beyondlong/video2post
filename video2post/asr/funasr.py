@@ -20,24 +20,54 @@ class FunASRTranscriber:
         *,
         language: str | None = None,
     ) -> list[TranscriptSegment]:
+        resolved = Path(audio_path)
+        if not resolved.exists():
+            raise FileNotFoundError(f"Audio file not found: {resolved}")
+
         model = self._model or self._load_model()
-        results = model.generate(input=str(Path(audio_path)), language=language or "zh")
-        return _map_results(results, language or "zh")
+        lang = language or "zh"
+        try:
+            results = model.generate(input=str(resolved), language=lang)
+        except Exception as exc:
+            raise RuntimeError(
+                f"FunASR transcription failed ({self.model_name}): {exc}"
+            ) from exc
+
+        segments = _map_results(results, lang)
+        if not segments:
+            raise RuntimeError(
+                f"FunASR returned no segments for {resolved.name}. "
+                "The audio may be silent, too short, or in an unsupported format."
+            )
+        return segments
 
     def _load_model(self) -> Any:
         try:
             from funasr import AutoModel
         except ImportError as exc:
-            raise RuntimeError("FunASR is not installed. Install with: pip install '.[asr-chinese]'") from exc
+            raise RuntimeError(
+                "FunASR is not installed. Install with: pip install '.[asr-chinese]'"
+            ) from exc
 
-        self._model = AutoModel(model=self.model_name)
+        try:
+            self._model = AutoModel(model=self.model_name)
+        except Exception as exc:
+            raise RuntimeError(
+                f"FunASR model '{self.model_name}' failed to load: {exc}. "
+                "Try a different model or check FunASR installation."
+            ) from exc
         return self._model
 
 
 def _map_results(results: Any, language: str) -> list[TranscriptSegment]:
     if not results:
         return []
-    sentence_info = results[0].get("sentence_info", [])
+    first = results[0]
+    sentence_info = first.get("sentence_info", []) if isinstance(first, dict) else []
+    if not sentence_info and isinstance(first, dict):
+        text = first.get("text", "").strip()
+        if text:
+            return [TranscriptSegment(start=0.0, end=0.0, text=text, language=language)]
     return [
         TranscriptSegment(
             start=float(item.get("start", 0)) / 1000.0,

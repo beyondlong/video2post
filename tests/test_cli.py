@@ -918,7 +918,7 @@ def test_video_shows_friendly_youtube_cookie_guidance(monkeypatch, tmp_path):
     )
 
     assert result.exit_code == 1
-    assert "YouTube download failed" in result.output
+    assert "browser cookies" in result.output
     assert "brew install node" in result.output
     assert "cookies_from_browser: chrome" in result.output
 

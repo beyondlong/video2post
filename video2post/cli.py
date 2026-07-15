@@ -6,6 +6,10 @@ from typing import Annotated
 import typer
 
 from video2post.config import config_to_dict, load_config
+from video2post.diagnostics import (
+    classify_download_error,
+    format_error_for_cli,
+)
 from video2post.doctor import DoctorStatus, collect_doctor_checks
 from video2post.drafts import generate_draft
 from video2post.downloader.ytdlp import detect_platform
@@ -409,6 +413,46 @@ def format_command(
     _echo_generated_paths(result.paths)
 
 
+@task_app.command("status")
+def task_status_command(
+    task_dir: Annotated[Path, typer.Argument(help="Existing video2post task directory.")],
+) -> None:
+    """Show detailed status and error diagnostics for a task."""
+    metadata_path = _metadata_path(task_dir)
+    try:
+        metadata = read_metadata(metadata_path)
+    except (FileNotFoundError, json.JSONDecodeError) as exc:
+        typer.echo(f"Cannot read task metadata: {exc}")
+        raise typer.Exit(code=1) from exc
+
+    typer.echo(f"Task: {metadata.task_dir.name}")
+    typer.echo(f"Status: {metadata.status.value}")
+    typer.echo(f"Platform: {metadata.platform}")
+    typer.echo(f"Source: {metadata.source_url}")
+    if metadata.video.title:
+        typer.echo(f"Title: {metadata.video.title}")
+    if metadata.asr_model:
+        typer.echo(f"ASR model: {metadata.asr_model}")
+    if metadata.llm_model:
+        typer.echo(f"LLM model: {metadata.llm_model}")
+    if metadata.retry_count:
+        typer.echo(f"Retry count: {metadata.retry_count}")
+
+    artifacts = _available_artifacts(metadata.task_dir)
+    typer.echo(f"Artifacts: {', '.join(artifacts) if artifacts else 'none'}")
+
+    if metadata.error:
+        typer.echo("")
+        typer.echo(format_error_for_cli(
+            metadata.error.error_code,
+            metadata.error.message,
+            metadata.error.fix_suggestions,
+            stage=metadata.error.stage,
+            retryable=metadata.error.retryable,
+            task_dir=str(metadata.task_dir),
+        ))
+
+
 @task_app.command("list")
 def task_list_command(
     config: Annotated[
@@ -455,6 +499,8 @@ def doctor() -> None:
             if check.required:
                 has_required_missing = True
         typer.echo(f"[{label}] {check.name} - {check.detail}")
+        if check.fix_hint and check.status != DoctorStatus.OK:
+            typer.echo(f"       Fix: {check.fix_hint}")
 
     if has_required_missing:
         typer.echo("Doctor summary: required dependencies are missing.")
@@ -536,8 +582,11 @@ def _collect_task_lines(output_dir: Path, *, limit: int) -> list[str]:
         metadata = read_metadata(metadata_path)
         artifacts = _available_artifacts(metadata.task_dir)
         artifact_text = ", ".join(artifacts) if artifacts else "no artifacts yet"
+        status_text = metadata.status.value
+        if metadata.error and metadata.error.error_code.value != "unknown":
+            status_text += f" ({metadata.error.error_code.value})"
         task_lines.append(
-            f"{metadata.task_dir.name} | status={metadata.status.value} | artifacts={artifact_text}"
+            f"{metadata.task_dir.name} | status={status_text} | artifacts={artifact_text}"
         )
     return task_lines
 
@@ -585,48 +634,15 @@ def fetch_initial_video_metadata(url: str, config=None) -> VideoMetadata:
 
 
 def _handle_cli_process_error(error: subprocess.CalledProcessError, *, platform: str) -> None:
-    stderr = (error.stderr or "").strip()
-    if platform == "youtube" and _looks_like_youtube_cookie_issue(stderr):
-        typer.echo("YouTube download failed: the video likely needs browser cookies.")
-        typer.echo("Recommended next steps:")
-        typer.echo("1. Install a JavaScript runtime: brew install node")
-        typer.echo("2. Create config.yaml in the project root with:")
-        typer.echo("   download:")
-        typer.echo("     cookies_from_browser: chrome")
-        typer.echo("   Or use safari if that is where you are logged into YouTube.")
-        raise typer.Exit(code=1)
-    if platform == "youtube" and _looks_like_youtube_ejs_issue(stderr):
-        typer.echo("YouTube download failed: yt-dlp could not solve the current JavaScript challenge.")
-        typer.echo("Recommended next steps:")
-        typer.echo("1. Confirm Node is installed: node -v")
-        typer.echo("2. Upgrade yt-dlp with EJS support: python3 -m pip install -U \"yt-dlp[default]\"")
-        typer.echo("3. Enable remote components in config.yaml:")
-        typer.echo("   download:")
-        typer.echo("     remote_components: ejs:github")
-        typer.echo("4. Keep browser cookies enabled if needed.")
-        raise typer.Exit(code=1)
-
-    detail = stderr or str(error)
-    typer.echo(f"Process failed: {detail}")
+    diag = classify_download_error(error, platform=platform)
+    typer.echo(format_error_for_cli(
+        diag.error_code,
+        (error.stderr or str(error)).strip(),
+        diag.fix_suggestions,
+        stage="download",
+        retryable=diag.retryable,
+    ))
     raise typer.Exit(code=1)
-
-
-def _looks_like_youtube_cookie_issue(stderr: str) -> bool:
-    lowered = stderr.lower()
-    return (
-        "sign in to confirm you’re not a bot" in lowered
-        or "sign in to confirm you're not a bot" in lowered
-        or "--cookies-from-browser" in lowered
-    )
-
-
-def _looks_like_youtube_ejs_issue(stderr: str) -> bool:
-    lowered = stderr.lower()
-    return (
-        "n challenge solving failed" in lowered
-        or "requested format is not available" in lowered
-        or "only images are available for download" in lowered
-    )
 
 
 if __name__ == "__main__":

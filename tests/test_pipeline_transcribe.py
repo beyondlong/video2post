@@ -265,6 +265,69 @@ def test_transcribe_audio_uses_chinese_provider_for_chinese_youtube(monkeypatch,
     assert loaded.asr_model == "medium"
 
 
+def test_transcribe_audio_rejects_chinese_source_with_no_cjk_text(tmp_path):
+    audio = tmp_path / "audio.wav"
+    audio.write_text("audio", encoding="utf-8")
+    metadata = TaskMetadata(
+        source_url="https://www.bilibili.com/video/BV456",
+        platform="bilibili",
+        task_dir=tmp_path,
+        video=VideoMetadata(title="B站中文视频"),
+    )
+    write_metadata(metadata)
+
+    class WrongLanguageTranscriber:
+        model_name = "wrong-asr"
+
+        def transcribe(self, audio_path, *, language=None):
+            return [
+                TranscriptSegment(
+                    start=0, end=30,
+                    text=" ".join(["hello world this is a test sentence"] * 10),
+                    language="en",
+                ),
+            ]
+
+    try:
+        transcribe_audio(tmp_path / "meta.json", AppConfig(), transcriber=WrongLanguageTranscriber())
+    except RuntimeError as error:
+        assert "Chinese source" in str(error)
+    else:
+        raise AssertionError("Expected quality check to reject non-Chinese transcript")
+
+    loaded = read_metadata(tmp_path / "meta.json")
+    assert loaded.status == TaskStatus.FAILED
+    assert loaded.error.error_code.value == "asr_quality_check_failed"
+
+
+def test_transcribe_audio_records_error_code_on_quality_failure(tmp_path):
+    audio = tmp_path / "audio.wav"
+    audio.write_text("audio", encoding="utf-8")
+    metadata = TaskMetadata(
+        source_url="https://youtu.be/test",
+        platform="youtube",
+        task_dir=tmp_path,
+        video=VideoMetadata(title="Test"),
+    )
+    write_metadata(metadata)
+
+    class FailTranscriber:
+        model_name = "fail-asr"
+
+        def transcribe(self, audio_path, *, language=None):
+            raise RuntimeError("ASR model crashed")
+
+    try:
+        transcribe_audio(tmp_path / "meta.json", AppConfig(), transcriber=FailTranscriber())
+    except RuntimeError:
+        pass
+
+    loaded = read_metadata(tmp_path / "meta.json")
+    assert loaded.status == TaskStatus.FAILED
+    assert loaded.error is not None
+    assert loaded.error.fix_suggestions
+
+
 def test_transcribe_audio_rejects_repetitive_hallucinated_transcript(tmp_path):
     audio = tmp_path / "audio.wav"
     audio.write_text("audio", encoding="utf-8")

@@ -117,7 +117,7 @@ asr:
 如果视频平台是 YouTube、但视频语言是中文，请在处理命令中加 `--lang zh`：
 
 ```bash
-python3 -m video2post.cli process "YOUTUBE_URL" --lang zh --generate
+python3 -m video2post.cli video "YOUTUBE_URL" --lang zh --generate
 ```
 
 如果某些 YouTube 视频提示需要登录或确认不是机器人，建议在 `config.yaml` 里再补：
@@ -182,13 +182,13 @@ python3 -m video2post.cli config show
 ### 跑一条 YouTube 样例
 
 ```bash
-video2post process "https://www.youtube.com/watch?v=474wZZHoWN4" --output ./outputs-check --generate --targets notes,titles --cleanup-source
+video2post video "https://www.youtube.com/watch?v=474wZZHoWN4" --output ./outputs-check --generate --targets notes,titles --cleanup-source
 ```
 
 如果当前 shell 里的 `video2post` 没有绑定到当前仓库，可改用：
 
 ```bash
-python3 -m video2post.cli process "https://www.youtube.com/watch?v=474wZZHoWN4" --output ./outputs-check --generate --targets notes,titles --cleanup-source
+python3 -m video2post.cli video "https://www.youtube.com/watch?v=474wZZHoWN4" --output ./outputs-check --generate --targets notes,titles --cleanup-source
 ```
 
 
@@ -197,25 +197,25 @@ python3 -m video2post.cli process "https://www.youtube.com/watch?v=474wZZHoWN4" 
 创作者快速试稿可以直接运行：
 
 ```bash
-video2post process "YOUTUBE_OR_BILIBILI_URL" --fast --cleanup-source
+video2post video "YOUTUBE_OR_BILIBILI_URL" --fast --cleanup-source
 ```
 
 `--fast` 会自动生成 `notes.md`、`x_article.md`、`x_thread.md`、`x_titles.md` 和发布格式文件，省去标准模式里的完整翻译稿、通用长文、脚本和标题候选。需要自定义快速产物时可以继续传 `--targets`，例如：
 
 ```bash
-video2post process "YOUTUBE_OR_BILIBILI_URL" --fast --targets notes,x_article
+video2post video "YOUTUBE_OR_BILIBILI_URL" --fast --targets notes,x_article
 ```
 
 ### 跑一条 B 站样例
 
 ```bash
-video2post process "https://www.bilibili.com/video/BV1fA9mBPEZt?t=7.0" --output ./outputs-check --generate --targets notes,titles --cleanup-source
+video2post video "https://www.bilibili.com/video/BV1fA9mBPEZt?t=7.0" --output ./outputs-check --generate --targets notes,titles --cleanup-source
 ```
 
 同样，如果命令入口还没绑定成功，也可以用：
 
 ```bash
-python3 -m video2post.cli process "https://www.bilibili.com/video/BV1fA9mBPEZt?t=7.0" --output ./outputs-check --generate --targets notes,titles --cleanup-source
+python3 -m video2post.cli video "https://www.bilibili.com/video/BV1fA9mBPEZt?t=7.0" --output ./outputs-check --generate --targets notes,titles --cleanup-source
 ```
 
 更多回归方式见：
@@ -299,9 +299,30 @@ yt-dlp --version
 
 ### 6. `FunASR` 很慢或者第一次下载很大
 
-这是当前已知现象。`FunASR` 在 macOS 上首次冷启动会拉较大的模型文件，当前更适合作为实验性 provider，而不是默认中文 ASR。
+这是当前已知现象。`FunASR` 在 macOS 上首次冷启动会拉较大的模型文件。
 
-如果你只是想先稳定跑通 MVP，建议优先沿用当前默认链路，不要把 `FunASR` 设为首选。
+当前中文 ASR 推荐策略：
+
+- **默认**：`faster_whisper`（轻量、稳定、无额外依赖）
+- **实验**：`funasr`（中文识别质量更好，但首次加载慢、依赖较重）
+
+如果 FunASR 加载失败，pipeline 会自动回退到 `faster_whisper`，不会中断任务。
+
+如果你只是想先稳定跑通 MVP，建议优先沿用当前默认链路：
+
+```yaml
+asr:
+  chinese_provider: faster_whisper
+  faster_whisper_model: base
+```
+
+确认环境稳定后再切换到 FunASR：
+
+```yaml
+asr:
+  chinese_provider: funasr
+  funasr_model: paraformer
+```
 
 ### 7. YouTube 提示 `Sign in to confirm you’re not a bot`
 

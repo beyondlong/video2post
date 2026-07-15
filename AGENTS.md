@@ -132,10 +132,13 @@ Pytest may warn that `.pytest_cache` cannot be written in restricted sandboxes. 
 - Follow existing module boundaries before adding new ones.
 - Keep CLI orchestration in `video2post/cli.py`.
 - Keep pipeline state transitions and generation flow in `video2post/pipeline.py`.
+- Keep error classification and fix suggestions in `video2post/diagnostics.py`.
+- Keep environment checks and version detection in `video2post/doctor.py`.
 - Keep platform-specific formatting in `video2post/formatters/`.
 - Keep prompts in `prompts/`; prompt names should match generation target names unless there is a clear reason.
 - Prefer structured parsing/helpers over ad hoc string rewrites for Markdown and metadata.
 - Keep generated task outputs out of commits unless the user explicitly asks for fixtures.
+- Pipeline errors should classify errors with `diagnostics.py` and pass `error_code` and `fix_suggestions` to `update_status`.
 
 ## Documentation Expectations
 

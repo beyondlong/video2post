@@ -24,6 +24,28 @@ class TaskStatus(StrEnum):
     FAILED = "failed"
 
 
+class ErrorCode(StrEnum):
+    UNKNOWN = "unknown"
+    DOWNLOAD_COOKIE_AUTH = "download_cookie_auth"
+    DOWNLOAD_JS_CHALLENGE = "download_js_challenge"
+    DOWNLOAD_VIDEO_UNAVAILABLE = "download_video_unavailable"
+    DOWNLOAD_NETWORK = "download_network"
+    FFMPEG_NOT_FOUND = "ffmpeg_not_found"
+    FFMPEG_CONVERSION_FAILED = "ffmpeg_conversion_failed"
+    ASR_MODEL_NOT_INSTALLED = "asr_model_not_installed"
+    ASR_TRANSCRIPTION_FAILED = "asr_transcription_failed"
+    ASR_QUALITY_CHECK_FAILED = "asr_quality_check_failed"
+    LLM_AUTH_FAILED = "llm_auth_failed"
+    LLM_MISSING_CONFIG = "llm_missing_config"
+    LLM_RATE_LIMIT = "llm_rate_limit"
+    LLM_TIMEOUT = "llm_timeout"
+    LLM_CONTENT_FILTERED = "llm_content_filtered"
+    LLM_PROVIDER_ERROR = "llm_provider_error"
+    LLM_REFUSAL = "llm_refusal"
+    FILE_NOT_FOUND = "file_not_found"
+    INVALID_INPUT = "invalid_input"
+
+
 class VideoMetadata(BaseModel):
     title: str | None = None
     author: str | None = None
@@ -42,6 +64,8 @@ class ErrorDetails(BaseModel):
     stage: str
     message: str
     retryable: bool = False
+    error_code: ErrorCode = ErrorCode.UNKNOWN
+    fix_suggestions: list[str] = Field(default_factory=list)
 
 
 class TaskMetadata(BaseModel):
@@ -56,3 +80,4 @@ class TaskMetadata(BaseModel):
     asr_model: str | None = None
     llm_model: str | None = None
     error: ErrorDetails | None = None
+    retry_count: int = 0

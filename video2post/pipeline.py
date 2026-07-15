@@ -11,6 +11,12 @@ from video2post.asr.faster_whisper import FasterWhisperTranscriber
 from video2post.asr.funasr import FunASRTranscriber
 from video2post.asr.mlx_whisper import MlxWhisperTranscriber
 from video2post.config import AppConfig
+from video2post.diagnostics import (
+    classify_asr_error,
+    classify_download_error,
+    classify_ffmpeg_error,
+    classify_llm_error,
+)
 from video2post.downloader.ytdlp import YtDlpDownloader
 from video2post.llm.openai_compatible import LlmProviderError, OpenAICompatibleProvider
 from video2post.llm.prompts import PromptRenderer
@@ -37,12 +43,15 @@ def fetch_video_metadata(
         write_metadata(metadata)
         return metadata
     except subprocess.CalledProcessError as error:
+        diag = classify_download_error(error, platform=metadata.platform)
         update_status(
             metadata_path,
             TaskStatus.FAILED,
             error_stage=TaskStatus.METADATA_FETCHED.value,
             error_message=(error.stderr or str(error)),
-            retryable=True,
+            retryable=diag.retryable,
+            error_code=diag.error_code,
+            fix_suggestions=diag.fix_suggestions,
         )
         raise
 
@@ -85,17 +94,20 @@ def prepare_audio(
         update_status(metadata_path, TaskStatus.AUDIO_NORMALIZED)
         return normalized_audio
     except subprocess.CalledProcessError as error:
-        failed_stage = (
-            "audio_download"
-            if error.cmd and "yt-dlp" in str(error.cmd[0])
-            else TaskStatus.AUDIO_NORMALIZED.value
-        )
+        is_download = error.cmd and "yt-dlp" in str(error.cmd[0])
+        failed_stage = "audio_download" if is_download else TaskStatus.AUDIO_NORMALIZED.value
+        if is_download:
+            diag = classify_download_error(error, platform=metadata.platform)
+        else:
+            diag = classify_ffmpeg_error(error)
         update_status(
             metadata_path,
             TaskStatus.FAILED,
             error_stage=failed_stage,
             error_message=(error.stderr or str(error)),
-            retryable=True,
+            retryable=diag.retryable,
+            error_code=diag.error_code,
+            fix_suggestions=diag.fix_suggestions,
         )
         raise
 
@@ -134,17 +146,17 @@ def transcribe_audio(
         write_metadata(metadata)
         return transcript_path
     except Exception as error:
-        error_stage = (
-            "transcription_quality"
-            if isinstance(error, TranscriptQualityError)
-            else TaskStatus.TRANSCRIBED.value
-        )
+        is_quality = isinstance(error, TranscriptQualityError)
+        error_stage = "transcription_quality" if is_quality else TaskStatus.TRANSCRIBED.value
+        diag = classify_asr_error(error, is_quality_error=is_quality)
         update_status(
             metadata_path,
             TaskStatus.FAILED,
             error_stage=error_stage,
             error_message=str(error),
-            retryable=True,
+            retryable=diag.retryable,
+            error_code=diag.error_code,
+            fix_suggestions=diag.fix_suggestions,
         )
         raise
 
@@ -248,12 +260,15 @@ def generate_outputs(
         write_metadata(metadata)
         return generated_paths
     except Exception as error:
+        diag = classify_llm_error(error)
         update_status(
             metadata_path,
             TaskStatus.FAILED,
             error_stage="llm_generation",
             error_message=str(error),
-            retryable=True,
+            retryable=diag.retryable,
+            error_code=diag.error_code,
+            fix_suggestions=diag.fix_suggestions,
         )
         raise
 
@@ -280,6 +295,7 @@ def _generate_cover_artifacts(
     cover_path = metadata.task_dir / "cover.jpg"
     cover_meta_path = metadata.task_dir / "cover.meta.json"
     cover_seconds = _resolve_cover_time_seconds(metadata, cover_at)
+    candidate_timestamps = _generate_candidate_timestamps(metadata, cover_at)
 
     try:
         active_cover_extractor.extract_frame(
@@ -287,6 +303,14 @@ def _generate_cover_artifacts(
             cover_path,
             at_seconds=cover_seconds,
         )
+        candidate_paths: list[Path] = []
+        if candidate_timestamps and hasattr(active_cover_extractor, "extract_candidates"):
+            candidates_dir = metadata.task_dir / "cover-candidates"
+            candidate_paths = active_cover_extractor.extract_candidates(
+                source_video,
+                candidates_dir,
+                timestamps=candidate_timestamps,
+            )
         cover_meta_path.write_text(
             json.dumps(
                 {
@@ -297,6 +321,9 @@ def _generate_cover_artifacts(
                     "cover_at_seconds": cover_seconds,
                     "source_video": source_video.name,
                     "output_file": cover_path.name,
+                    "candidate_timestamps": candidate_timestamps,
+                    "candidate_count": len(candidate_paths),
+                    "candidates_dir": "cover-candidates" if candidate_paths else None,
                 },
                 indent=2,
                 ensure_ascii=False,
@@ -309,7 +336,9 @@ def _generate_cover_artifacts(
         metadata.status = TaskStatus.COVER_GENERATED
         metadata.error = None
         write_metadata(metadata)
-        return [cover_path, cover_meta_path]
+        result_paths = [cover_path, cover_meta_path]
+        result_paths.extend(candidate_paths)
+        return result_paths
     except Exception:
         if source_video_is_temporary:
             source_video.unlink(missing_ok=True)
@@ -329,6 +358,33 @@ def _resolve_cover_time_seconds(metadata: TaskMetadata, cover_at: str | None) ->
     if duration_seconds:
         return float(round(duration_seconds * 0.2, 2))
     return 30.0
+
+
+_CANDIDATE_COUNT = 5
+_MIN_DURATION_FOR_CANDIDATES = 30
+
+
+def _generate_candidate_timestamps(
+    metadata: TaskMetadata,
+    cover_at: str | None,
+) -> list[float]:
+    """Generate multiple candidate timestamps spread across the video.
+
+    Avoids the first 5% and last 5% (likely intro/outro frames) and
+    distributes candidates evenly across the middle 90%.
+    """
+    if cover_at:
+        return []
+    duration = metadata.video.duration_seconds
+    if not duration or duration < _MIN_DURATION_FOR_CANDIDATES:
+        return []
+    margin = duration * 0.05
+    usable_start = max(margin, 3.0)
+    usable_end = duration - margin
+    if usable_end <= usable_start:
+        return []
+    step = (usable_end - usable_start) / (_CANDIDATE_COUNT + 1)
+    return [round(usable_start + step * i, 2) for i in range(1, _CANDIDATE_COUNT + 1)]
 
 
 def _parse_time_to_seconds(value: str) -> float:
@@ -757,16 +813,30 @@ def _validate_transcript_quality(metadata: TaskMetadata, segments: list[Transcri
         cjk_count = len(_CJK_RE.findall(text))
         if cjk_count < 20 and len(latin_words) >= 80:
             raise TranscriptQualityError(
-                "Transcript quality check failed: Chinese source produced almost no Chinese text. "
-                "The ASR model may be wrong for this video, or the audio may be damaged."
+                "Transcript quality check failed: Chinese source produced almost no Chinese text "
+                f"({cjk_count} CJK chars, {len(latin_words)} Latin words). "
+                "The ASR model may be wrong for this video, or the audio may be damaged. "
+                "Try setting asr.chinese_provider to 'faster_whisper' or 'funasr' in config.yaml."
+            )
+        if cjk_count < 5 and len(text) > 100:
+            raise TranscriptQualityError(
+                "Transcript quality check failed: Chinese source produced no meaningful Chinese text. "
+                "Check audio quality and ASR model configuration."
             )
 
 
 def _build_transcriber(metadata: TaskMetadata, config: AppConfig) -> object:
     if _is_chinese_source(metadata):
-        if config.asr.chinese_provider == "funasr":
-            return FunASRTranscriber(model_name=config.asr.funasr_model)
-        return FasterWhisperTranscriber(model_name=config.asr.faster_whisper_model)
+        return _build_chinese_transcriber(config)
     if metadata.platform == "youtube" and config.asr.english_provider == "mlx_whisper":
         return MlxWhisperTranscriber(model_name=config.asr.mlx_whisper_model)
+    return FasterWhisperTranscriber(model_name=config.asr.faster_whisper_model)
+
+
+def _build_chinese_transcriber(config: AppConfig) -> object:
+    if config.asr.chinese_provider == "funasr":
+        try:
+            return FunASRTranscriber(model_name=config.asr.funasr_model)
+        except RuntimeError:
+            return FasterWhisperTranscriber(model_name=config.asr.faster_whisper_model)
     return FasterWhisperTranscriber(model_name=config.asr.faster_whisper_model)

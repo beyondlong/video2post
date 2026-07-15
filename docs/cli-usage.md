@@ -73,6 +73,8 @@ video2post video "VIDEO_URL" --generate --targets cover --cover-at 00:00:30
 video2post task generate TASK_DIR --targets cover --cover-at 00:00:30
 ```
 
+不指定 `--cover-at` 时，对于 30 秒以上的视频，会自动在视频的 5%~95% 区间内均匀采样 5 个候选帧，保存到 `cover-candidates/` 目录。`cover.jpg` 仍然是默认选中的主封面（视频 20% 位置）。候选帧信息记录在 `cover.meta.json` 中。
+
 ### 7. 日常素材生成 X 草稿
 
 把日常想法、读书笔记、聊天内容或手动粘贴的 X 原推正文改写成 X 发布素材：
@@ -287,6 +289,16 @@ video2post format TASK_DIR --source x_article --platform wechat,x
 - WeChat 优先使用 `article.md`，没有时 fallback 到 `x_article.md`。
 - X 优先使用 `x_article.md`，没有时 fallback 到 `article.md`。
 
+### `task status`
+
+查看任务详细状态和错误诊断信息。
+
+```bash
+video2post task status TASK_DIR
+```
+
+输出包含：任务状态、平台、来源 URL、已有产物清单。如果任务失败，会显示结构化错误信息和修复建议。
+
 ### `task list`
 
 列出最近任务和已有产物。
@@ -347,9 +359,47 @@ video2post task generate TASK_DIR --targets publish_formats
 
 这不会重新下载、转写或调用 LLM 生成正文，只会基于已有 `article.md` / `x_article.md` 输出发布格式。
 
-## 故障排查提示
+## 故障排查
+
+### 查看任务错误
+
+任务失败后，使用 `task status` 查看结构化错误信息和修复建议：
+
+```bash
+video2post task status TASK_DIR
+```
+
+输出示例：
+
+```
+Status: failed
+Error: YouTube requires browser cookies for authentication
+Stage: audio_download
+How to fix:
+  1. Install a JavaScript runtime: brew install node
+  2. Add to config.yaml:
+    download:
+      cookies_from_browser: chrome
+This error is retryable. Run: video2post task retry TASK_DIR
+```
+
+### 使用 doctor 检查环境
+
+`doctor` 命令会检查所有依赖并给出修复建议：
+
+```bash
+video2post doctor
+```
+
+输出会显示每个依赖的状态（OK/MISSING/OPTIONAL），缺失项会附带安装命令。现在还会显示 ffmpeg 和 yt-dlp 的版本号、Node.js 是否安装、config.yaml 是否可解析。
+
+### 常见问题
 
 - YouTube 提示登录或机器人校验：在 `config.yaml` 配置 `download.cookies_from_browser: chrome` 或 `safari`。
+- YouTube JS 挑战失败：确认 Node.js 已安装，更新 yt-dlp 并启用 `download.remote_components: ejs:github`。
+- LLM API 认证失败：检查 `.env` 中的 `VIDEO2POST_LLM_API_KEY` 是否正确。
+- LLM 超时：增大 `llm.request_timeout_seconds` 或减小 `generation.chunk_max_chars`。
+- ASR 模型缺失：运行 `video2post doctor` 查看哪些 ASR 后端已安装。
 - 中文 YouTube 识别成英文链路：加 `--lang zh`。
 - 只想重新生成某个文件：优先用 `task generate TASK_DIR --targets ...`。
 - 不想保留下载源文件：加 `--cleanup-source`。

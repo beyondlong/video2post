@@ -71,3 +71,26 @@ class FfmpegVideoFrameExtractor:
             text=True,
         )
         return target_path
+
+    def extract_candidates(
+        self,
+        source: Path | str,
+        output_dir: Path | str,
+        *,
+        timestamps: list[float],
+        prefix: str = "candidate",
+    ) -> list[Path]:
+        """Extract multiple candidate frames at the given timestamps."""
+        source_path = Path(source)
+        out = Path(output_dir)
+        out.mkdir(parents=True, exist_ok=True)
+        paths: list[Path] = []
+        for index, ts in enumerate(timestamps, start=1):
+            target = out / f"{prefix}-{index:03d}.jpg"
+            try:
+                self.extract_frame(source_path, target, at_seconds=ts)
+                if target.exists() and target.stat().st_size > 0:
+                    paths.append(target)
+            except subprocess.CalledProcessError:
+                continue
+        return paths

@@ -70,11 +70,22 @@ class FakeCoverDownloader:
 class FakeCoverExtractor:
     def __init__(self):
         self.calls = []
+        self.candidate_calls = []
 
     def extract_frame(self, source, target, *, at_seconds):
         self.calls.append((source, target, at_seconds))
         target.write_text("cover", encoding="utf-8")
         return target
+
+    def extract_candidates(self, source, output_dir, *, timestamps, prefix="candidate"):
+        self.candidate_calls.append((source, output_dir, timestamps))
+        paths = []
+        output_dir.mkdir(parents=True, exist_ok=True)
+        for i, ts in enumerate(timestamps, 1):
+            p = output_dir / f"{prefix}-{i:03d}.jpg"
+            p.write_text(f"candidate-{i}", encoding="utf-8")
+            paths.append(p)
+        return paths
 
 
 def test_generate_outputs_writes_requested_files_and_updates_metadata(tmp_path):
@@ -351,11 +362,21 @@ def test_generate_outputs_can_generate_cover_artifacts(tmp_path):
         cover_extractor=extractor,
     )
 
-    assert outputs == [tmp_path / "cover.jpg", tmp_path / "cover.meta.json"]
+    assert outputs[0] == tmp_path / "cover.jpg"
+    assert outputs[1] == tmp_path / "cover.meta.json"
     assert extractor.calls[0][2] == 40.0
+    assert len(extractor.candidate_calls) == 1
+    assert len(extractor.candidate_calls[0][2]) == 5
+    assert (tmp_path / "cover-candidates").is_dir()
     loaded = read_metadata(tmp_path / "meta.json")
     assert loaded.status == TaskStatus.COVER_GENERATED
     assert not (tmp_path / "cover-source.mp4").exists()
+
+    import json
+    cover_meta = json.loads((tmp_path / "cover.meta.json").read_text(encoding="utf-8"))
+    assert cover_meta["candidate_count"] == 5
+    assert cover_meta["candidates_dir"] == "cover-candidates"
+    assert len(cover_meta["candidate_timestamps"]) == 5
 
 
 def test_generate_outputs_can_use_explicit_cover_time(tmp_path):
@@ -378,6 +399,28 @@ def test_generate_outputs_can_use_explicit_cover_time(tmp_path):
     )
 
     assert extractor.calls[0][2] == 30.0
+    assert extractor.candidate_calls == []
+
+
+def test_generate_outputs_skips_candidates_for_short_video(tmp_path):
+    metadata = TaskMetadata(
+        source_url="https://youtu.be/test",
+        platform="youtube",
+        task_dir=tmp_path,
+        video=VideoMetadata(title="Short Video", duration_seconds=20),
+    )
+    write_metadata(metadata)
+    extractor = FakeCoverExtractor()
+
+    generate_outputs(
+        tmp_path / "meta.json",
+        AppConfig(),
+        targets=["cover"],
+        downloader=FakeCoverDownloader(),
+        cover_extractor=extractor,
+    )
+
+    assert extractor.candidate_calls == []
 
 
 def test_generate_outputs_clears_previous_error_on_success(tmp_path):
